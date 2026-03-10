@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0D0D0D">
+  <meta name="description" content="Tesla Custom Wraps Editor - 나만의 Tesla 랩 디자인을 만들어보세요">
+  <title>Tesla Custom Wraps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       MODEL SELECTION SCREEN
+       ============================================================ -->
+  <div id="screen-select" class="screen-select">
+    <header class="select-header">
+      <h1>모델 선택</h1>
+      <span class="brand">Tesla Custom Wraps</span>
+    </header>
+
+    <div id="model-grid" class="model-grid">
+      <!-- Populated by JS -->
+    </div>
+
+    <footer class="select-footer">
+      <p class="privacy-notice">
+        모든 처리는 브라우저에서 로컬로 이루어집니다. 서버에 데이터가 전송되지 않습니다.<br>
+        All processing happens locally in your browser.
+      </p>
+    </footer>
+  </div>
+
+  <!-- ============================================================
+       EDITOR SCREEN
+       ============================================================ -->
+  <div id="screen-editor" class="screen-editor hidden">
+
+    <!-- Header -->
+    <header class="editor-header">
+      <button class="btn-icon" id="btn-back" aria-label="뒤로가기">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="editor-header-center">
+        <span class="editor-model-name" id="editor-model-name">Model 3</span>
+      </div>
+      <div class="editor-header-actions">
+        <button class="btn-before-after" id="btn-before-after">Before</button>
+        <button class="btn btn-primary btn-export-header" id="btn-export">내보내기</button>
+      </div>
+    </header>
+
+    <!-- Canvas Area -->
+    <div class="canvas-area">
+      <div class="canvas-wrapper">
+        <canvas id="main-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Tab Bar (Mobile) -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="upload">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 5V15M12 5L8 9M12 5L16 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 14V18C4 19.1 4.9 20 6 20H18C19.1 20 20 19.1 20 18V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        업로드
+      </button>
+      <button class="tab-btn" data-tab="controls">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="8" cy="6" r="2" fill="currentColor"/>
+          <circle cx="16" cy="12" r="2" fill="currentColor"/>
+          <circle cx="10" cy="18" r="2" fill="currentColor"/>
+        </svg>
+        컨트롤
+      </button>
+      <button class="tab-btn" data-tab="settings">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+          <path d="M12 2V5M12 19V22M2 12H5M19 12H22M4.93 4.93L7.05 7.05M16.95 16.95L19.07 19.07M19.07 4.93L16.95 7.05M7.05 16.95L4.93 19.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        설정
+      </button>
+    </nav>
+
+    <!-- Tab Panels -->
+    <div class="tab-panels">
+
+      <!-- Upload Tab -->
+      <div class="tab-panel" data-tab="upload">
+        <div id="upload-zone-container"></div>
+        <div id="image-info-container" class="hidden"></div>
+      </div>
+
+      <!-- Controls Tab -->
+      <div class="tab-panel hidden" data-tab="controls">
+        <div id="controls-container"></div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div class="tab-panel hidden" data-tab="settings">
+        <div class="settings-section">
+          <h4>사용 방법</h4>
+          <p>
+            1. 이미지를 업로드하세요.<br>
+            2. 캔버스에서 드래그하여 위치를 조정하세요.<br>
+            3. 핀치 제스처로 크기와 회전을 조정하세요.<br>
+            4. 슬라이더로 미세 조정하세요.<br>
+            5. 내보내기 버튼으로 PNG를 다운로드하세요.
+          </p>
+        </div>
+        <div class="settings-section">
+          <h4>USB 설정</h4>
+          <p>
+            USB를 <code>FAT32</code> 또는 <code>exFAT</code>로 포맷하고,
+            루트에 <code>/Wraps/</code> 폴더를 만든 후 PNG 파일을 넣으세요.
+            Tesla에서 <strong>Toybox &gt; Paint Shop</strong>을 열면 됩니다.
+          </p>
+        </div>
+        <div class="settings-section">
+          <h4>개인정보</h4>
+          <p>
+            이 앱은 서버에 어떤 데이터도 전송하지 않습니다.
+            모든 이미지 처리는 브라우저에서 로컬로 수행됩니다.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/models.js"></script>
+  <script src="js/canvas-engine.js"></script>
+  <script src="js/ui-components.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

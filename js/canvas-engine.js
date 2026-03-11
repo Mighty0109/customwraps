@@ -11,7 +11,10 @@ const CanvasEngine = (function () {
   let offCtx = null;
 
   let templateImage = null;
-  let userImage = null;
+  let userImages = [];       // Array of { image, id }
+  let maskCanvas = null;     // Mask derived from template (white panels → opaque)
+  let userLayerCanvas = null; // Temp canvas for compositing user images + mask
+  let userLayerCtx = null;
   let internalSize = 1024;
   let internalWidth = 1024;
   let internalHeight = 1024;
@@ -51,6 +54,11 @@ const CanvasEngine = (function () {
     offscreen.width = internalWidth;
     offscreen.height = internalHeight;
     offCtx = offscreen.getContext('2d');
+
+    userLayerCanvas = document.createElement('canvas');
+    userLayerCanvas.width = internalWidth;
+    userLayerCanvas.height = internalHeight;
+    userLayerCtx = userLayerCanvas.getContext('2d');
 
     createCheckerboard();
     setupTouchEvents();
@@ -92,7 +100,7 @@ const CanvasEngine = (function () {
     let mouseStartOffX = 0, mouseStartOffY = 0;
 
     displayCanvas.addEventListener('mousedown', (e) => {
-      if (!userImage) return;
+      if (userImages.length === 0) return;
       mouseDown = true;
       const rect = displayCanvas.getBoundingClientRect();
       const ratioX = internalWidth / rect.width;
@@ -127,7 +135,7 @@ const CanvasEngine = (function () {
 
     // Mouse wheel zoom
     displayCanvas.addEventListener('wheel', (e) => {
-      if (!userImage) return;
+      if (userImages.length === 0) return;
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.05 : 0.05;
       state.scale = Math.min(5, Math.max(0.1, state.scale + delta));
@@ -147,7 +155,7 @@ const CanvasEngine = (function () {
   }
 
   function onTouchStart(e) {
-    if (!userImage) return;
+    if (userImages.length === 0) return;
     e.preventDefault();
 
     const touches = e.touches;
@@ -171,7 +179,7 @@ const CanvasEngine = (function () {
   }
 
   function onTouchMove(e) {
-    if (!userImage) return;
+    if (userImages.length === 0) return;
     e.preventDefault();
 
     const touches = e.touches;
@@ -245,6 +253,10 @@ const CanvasEngine = (function () {
       offscreen.width = internalWidth;
       offscreen.height = internalHeight;
       offCtx = offscreen.getContext('2d');
+      userLayerCanvas.width = internalWidth;
+      userLayerCanvas.height = internalHeight;
+      userLayerCtx = userLayerCanvas.getContext('2d');
+      generateMask();
       render();
     }).catch(() => {
       // Fallback to placeholder
@@ -255,17 +267,67 @@ const CanvasEngine = (function () {
       offscreen.width = internalWidth;
       offscreen.height = internalHeight;
       offCtx = offscreen.getContext('2d');
+      userLayerCanvas.width = internalWidth;
+      userLayerCanvas.height = internalHeight;
+      userLayerCtx = userLayerCanvas.getContext('2d');
       templateImage = generatePlaceholderTemplate(model, internalSize);
+      generateMask();
       render();
     });
   }
 
-  function setUserImage(img) {
-    userImage = img;
-    if (img) {
+  /**
+   * Generate a mask from the template image.
+   * White/bright areas (car panels) → opaque mask.
+   * Dark areas (borders/outlines) → transparent mask.
+   */
+  function generateMask() {
+    if (!templateImage) return;
+
+    maskCanvas = document.createElement('canvas');
+    maskCanvas.width = internalWidth;
+    maskCanvas.height = internalHeight;
+    const mCtx = maskCanvas.getContext('2d');
+
+    // Draw template onto mask canvas
+    mCtx.drawImage(templateImage, 0, 0, internalWidth, internalHeight);
+
+    // Convert brightness to alpha
+    const imageData = mCtx.getImageData(0, 0, internalWidth, internalHeight);
+    const d = imageData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const brightness = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+      // Map brightness → alpha (white panels = opaque, dark outlines = transparent)
+      d[i] = 255;
+      d[i + 1] = 255;
+      d[i + 2] = 255;
+      d[i + 3] = Math.round(brightness);
+    }
+    mCtx.putImageData(imageData, 0, 0);
+  }
+
+  function addUserImage(img, id) {
+    userImages.push({ image: img, id: id });
+    if (userImages.length === 1) {
       autoPlace(img);
     }
     render();
+  }
+
+  function removeUserImage(id) {
+    userImages = userImages.filter(item => item.id !== id);
+    if (userImages.length === 0) {
+      resetState();
+    }
+    render();
+  }
+
+  function updateUserImage(id, newImage) {
+    const item = userImages.find(item => item.id === id);
+    if (item) {
+      item.image = newImage;
+      render();
+    }
   }
 
   /**
@@ -341,8 +403,8 @@ const CanvasEngine = (function () {
       offsetX: 0,
       offsetY: 0,
     };
-    if (userImage) {
-      autoPlace(userImage);
+    if (userImages.length > 0) {
+      autoPlace(userImages[0].image);
     }
     render();
     syncUIFromState();
@@ -412,15 +474,37 @@ const CanvasEngine = (function () {
     offCtx.fillStyle = '#FFFFFF';
     offCtx.fillRect(0, 0, w, h);
 
-    // 2. Draw user image
-    if (userImage) {
-      offCtx.save();
-      offCtx.globalAlpha = state.opacity;
-      drawUserImage(offCtx, w, h);
-      offCtx.restore();
+    // 2. Draw user images with mask
+    if (userImages.length > 0) {
+      // Ensure userLayerCanvas matches current dimensions
+      if (userLayerCanvas.width !== w || userLayerCanvas.height !== h) {
+        userLayerCanvas.width = w;
+        userLayerCanvas.height = h;
+        userLayerCtx = userLayerCanvas.getContext('2d');
+      }
+      userLayerCtx.clearRect(0, 0, w, h);
+
+      // Draw all user images layered
+      for (const imgData of userImages) {
+        userLayerCtx.save();
+        userLayerCtx.globalAlpha = state.opacity;
+        drawUserImage(userLayerCtx, w, h, imgData.image);
+        userLayerCtx.restore();
+      }
+
+      // Apply mask: clip user images to panel areas only
+      if (maskCanvas) {
+        userLayerCtx.save();
+        userLayerCtx.globalCompositeOperation = 'destination-in';
+        userLayerCtx.drawImage(maskCanvas, 0, 0, w, h);
+        userLayerCtx.restore();
+      }
+
+      // Composite masked user layer onto main offscreen
+      offCtx.drawImage(userLayerCanvas, 0, 0);
     }
 
-    // 3. Multiply blend template on top
+    // 3. Multiply blend template on top (preserves panel outlines)
     if (templateImage) {
       offCtx.save();
       offCtx.globalAlpha = 1;
@@ -431,8 +515,7 @@ const CanvasEngine = (function () {
     }
   }
 
-  function drawUserImage(ctx, canvasW, canvasH) {
-    const img = userImage;
+  function drawUserImage(ctx, canvasW, canvasH, img) {
     const imgW = img.naturalWidth || img.width;
     const imgH = img.naturalHeight || img.height;
     const cx = canvasW / 2;
@@ -578,19 +661,25 @@ const CanvasEngine = (function () {
   }
 
   function hasUserImage() {
-    return !!userImage;
+    return userImages.length > 0;
   }
 
-  function clearUserImage() {
-    userImage = null;
+  function clearUserImages() {
+    userImages = [];
     resetState();
     render();
+  }
+
+  function getUserImageCount() {
+    return userImages.length;
   }
 
   return {
     init,
     setTemplate,
-    setUserImage,
+    addUserImage,
+    removeUserImage,
+    updateUserImage,
     updateState,
     getState,
     resetState,
@@ -599,6 +688,7 @@ const CanvasEngine = (function () {
     getPreviewDataURL,
     getTemplateOnlyDataURL,
     hasUserImage,
-    clearUserImage,
+    clearUserImages,
+    getUserImageCount,
   };
 })();

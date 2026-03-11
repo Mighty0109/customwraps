@@ -470,6 +470,24 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 .has-image .drop-zone-text { font-size: 0.8125rem; }
 .has-image .drop-zone-text br { display: none; }
 
+.is-full .drop-zone {
+  display: none;
+}
+
+/* ---- Upload Count ---- */
+.upload-count {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-align: right;
+}
+
+.btn-clear-all {
+  width: 100%;
+  margin-top: 8px;
+}
+
 /* ---- Image Info Card ---- */
 .image-info-card {
   display: flex;
@@ -521,9 +539,25 @@ h4 { font-size: 0.95rem; font-weight: 600; }
   margin-top: 2px;
 }
 
+.image-info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.image-info-edit {
+  color: var(--text-tertiary);
+  width: 36px;
+  height: 36px;
+}
+.image-info-edit:hover { color: var(--accent-primary); }
+
 .image-info-remove {
   flex-shrink: 0;
   color: var(--text-tertiary);
+  width: 36px;
+  height: 36px;
 }
 .image-info-remove:hover { color: var(--danger); }
 
@@ -889,6 +923,123 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 .toast.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* ============================================================
+   IMAGE EDITOR (Background Eraser)
+   ============================================================ */
+
+.img-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+
+.img-editor-overlay.active {
+  opacity: 1;
+}
+
+.img-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  padding-top: calc(6px + var(--safe-top));
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  min-height: 48px;
+  flex-shrink: 0;
+}
+
+.img-editor-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.img-editor-save {
+  min-height: 32px;
+  padding: 4px 16px;
+  font-size: 0.8125rem;
+}
+
+.img-editor-canvas-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 12px;
+  min-height: 0;
+}
+
+.img-editor-canvas-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.img-editor-canvas {
+  display: block;
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.img-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-bottom: calc(8px + var(--safe-bottom));
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.img-editor-undo,
+.img-editor-reset {
+  flex-shrink: 0;
+}
+
+.img-editor-undo:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.img-editor-brush-control {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.img-editor-brush-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.img-editor-brush-slider {
+  flex: 1;
+  min-width: 0;
+}
+
+.img-editor-brush-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
 }
 
 /* ============================================================

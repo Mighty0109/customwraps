@@ -106,7 +106,7 @@ const UI = (function () {
    * Create drag & drop upload zone.
    */
   function createDropZone(opts) {
-    const { onFile, accept = '.png,.jpg,.jpeg,.webp' } = opts;
+    const { onFile, accept = '.png,.jpg,.jpeg,.webp', multiple = false } = opts;
 
     const zone = document.createElement('div');
     zone.className = 'drop-zone';
@@ -117,13 +117,14 @@ const UI = (function () {
           <path d="M8 28V38C8 39.1 8.9 40 10 40H38C39.1 40 40 39.1 40 38V28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <p class="drop-zone-text">이미지를 드래그하거나<br>탭하여 선택하세요</p>
-        <p class="drop-zone-hint">PNG, JPG, WebP</p>
+        <p class="drop-zone-hint">PNG, JPG, WebP (최대 5장)</p>
       </div>
     `;
 
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = accept;
+    if (multiple) fileInput.multiple = true;
     fileInput.style.display = 'none';
     zone.appendChild(fileInput);
 
@@ -141,13 +142,13 @@ const UI = (function () {
     zone.addEventListener('drop', (e) => {
       e.preventDefault();
       zone.classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file) processFile(file, onFile);
+      const files = Array.from(e.dataTransfer.files);
+      files.forEach(file => processFile(file, onFile));
     });
 
     fileInput.addEventListener('change', () => {
-      const file = fileInput.files[0];
-      if (file) processFile(file, onFile);
+      const files = Array.from(fileInput.files);
+      files.forEach(file => processFile(file, onFile));
       fileInput.value = '';
     });
 
@@ -247,6 +248,17 @@ const UI = (function () {
     details.appendChild(nameEl);
     details.appendChild(infoEl);
 
+    const actions = document.createElement('div');
+    actions.className = 'image-info-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn-icon image-info-edit';
+    editBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <path d="M14.85 2.85a1.5 1.5 0 012.1 2.1L6.5 15.4l-3.5 1 1-3.5L14.85 2.85z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12.5 5.2l2.3 2.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>`;
+    editBtn.title = '배경 지우기';
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-icon image-info-remove';
     removeBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -254,11 +266,14 @@ const UI = (function () {
     </svg>`;
     removeBtn.title = '이미지 제거';
 
+    actions.appendChild(editBtn);
+    actions.appendChild(removeBtn);
+
     card.appendChild(thumb);
     card.appendChild(details);
-    card.appendChild(removeBtn);
+    card.appendChild(actions);
 
-    return { card, removeBtn };
+    return { card, editBtn, removeBtn };
   }
 
   /**

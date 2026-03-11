@@ -9,11 +9,13 @@ const App = (function () {
   let currentScreen = 'select'; // 'select' | 'editor'
   let currentTab = 'upload';    // 'upload' | 'controls' | 'settings'
 
+  const MAX_IMAGES = 5;
+
   // UI element references
   let controlRefs = {};
   let uploadZoneContainer = null;
   let imageInfoContainer = null;
-  let currentFileInfo = null;
+  let uploadedFiles = [];   // Array of { image, name, size, width, height, ..., id }
 
   function init() {
     renderModelSelection();
@@ -80,7 +82,7 @@ const App = (function () {
     CanvasEngine.setTemplate(model);
 
     // Reset upload state
-    clearUploadedImage();
+    clearAllImages();
     showTab('upload');
     showScreen('editor');
   }
@@ -136,36 +138,86 @@ const App = (function () {
 
     const zone = UI.createDropZone({
       onFile: handleImageUpload,
+      multiple: true,
     });
     uploadZoneContainer.appendChild(zone);
   }
 
   function handleImageUpload(fileInfo) {
-    currentFileInfo = fileInfo;
-    CanvasEngine.setUserImage(fileInfo.image);
+    if (uploadedFiles.length >= MAX_IMAGES) {
+      UI.showToast(`최대 ${MAX_IMAGES}장까지 업로드할 수 있습니다.`);
+      return;
+    }
 
-    // Show image info
-    imageInfoContainer.innerHTML = '';
-    const { card, removeBtn } = UI.createImageInfo(fileInfo);
-    removeBtn.addEventListener('click', clearUploadedImage);
-    imageInfoContainer.appendChild(card);
+    // Assign unique ID
+    fileInfo.id = Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    uploadedFiles.push(fileInfo);
+    CanvasEngine.addUserImage(fileInfo.image, fileInfo.id);
 
-    // Switch to controls
-    uploadZoneContainer.classList.add('has-image');
-    imageInfoContainer.classList.remove('hidden');
+    updateUploadUI();
 
-    // Auto-switch to controls tab on mobile
-    if (window.innerWidth < 1200) {
+    // Auto-switch to controls tab on mobile (only on first image)
+    if (uploadedFiles.length === 1 && window.innerWidth < 1200) {
       setTimeout(() => showTab('controls'), 300);
     }
   }
 
-  function clearUploadedImage() {
-    currentFileInfo = null;
-    CanvasEngine.clearUserImage();
+  function removeImage(id) {
+    uploadedFiles = uploadedFiles.filter(f => f.id !== id);
+    CanvasEngine.removeUserImage(id);
+    updateUploadUI();
+  }
+
+  function openImageEditor(fileInfo) {
+    ImageEditor.open(fileInfo.image, (newImage) => {
+      fileInfo.image = newImage;
+      fileInfo.width = newImage.naturalWidth || newImage.width;
+      fileInfo.height = newImage.naturalHeight || newImage.height;
+      CanvasEngine.updateUserImage(fileInfo.id, newImage);
+      updateUploadUI();
+    });
+  }
+
+  function clearAllImages() {
+    uploadedFiles = [];
+    CanvasEngine.clearUserImages();
+    updateUploadUI();
+  }
+
+  function updateUploadUI() {
     imageInfoContainer.innerHTML = '';
-    imageInfoContainer.classList.add('hidden');
-    uploadZoneContainer.classList.remove('has-image');
+
+    if (uploadedFiles.length > 0) {
+      // Image count header
+      const countEl = document.createElement('div');
+      countEl.className = 'upload-count';
+      countEl.textContent = `이미지 ${uploadedFiles.length} / ${MAX_IMAGES}`;
+      imageInfoContainer.appendChild(countEl);
+
+      // Image list
+      uploadedFiles.forEach((fileInfo) => {
+        const { card, editBtn, removeBtn } = UI.createImageInfo(fileInfo);
+        editBtn.addEventListener('click', () => openImageEditor(fileInfo));
+        removeBtn.addEventListener('click', () => removeImage(fileInfo.id));
+        imageInfoContainer.appendChild(card);
+      });
+
+      // Clear all button (when 2+ images)
+      if (uploadedFiles.length >= 2) {
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'btn btn-secondary btn-sm btn-clear-all';
+        clearBtn.textContent = '전체 삭제';
+        clearBtn.addEventListener('click', clearAllImages);
+        imageInfoContainer.appendChild(clearBtn);
+      }
+
+      imageInfoContainer.classList.remove('hidden');
+      uploadZoneContainer.classList.toggle('has-image', true);
+      uploadZoneContainer.classList.toggle('is-full', uploadedFiles.length >= MAX_IMAGES);
+    } else {
+      imageInfoContainer.classList.add('hidden');
+      uploadZoneContainer.classList.remove('has-image', 'is-full');
+    }
   }
 
   // ========================
@@ -290,8 +342,6 @@ const App = (function () {
     if (!btn) return;
 
     const canvas = document.getElementById('main-canvas');
-
-    let originalSrc = null;
 
     btn.addEventListener('mousedown', showTemplate);
     btn.addEventListener('touchstart', (e) => { e.preventDefault(); showTemplate(); });

@@ -92,7 +92,10 @@ const App = (function () {
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => showTab(btn.dataset.tab));
     });
-    document.getElementById('btn-back').addEventListener('click', () => showScreen('select'));
+    document.getElementById('btn-back').addEventListener('click', () => {
+      CanvasEngine.setShowPanelNumbers(false);
+      showScreen('select');
+    });
 
     // Containers
     layerListContainer = document.getElementById('layer-list-container');
@@ -115,6 +118,12 @@ const App = (function () {
     document.querySelectorAll('.tab-panel').forEach(panel => {
       panel.classList.toggle('hidden', panel.dataset.tab !== tab);
     });
+    // Only show panel numbers when controls tab is active and a layer is selected
+    if (tab !== 'controls') {
+      CanvasEngine.setShowPanelNumbers(false);
+    } else if (CanvasEngine.getSelectedLayer()) {
+      CanvasEngine.setShowPanelNumbers(true);
+    }
   }
 
   // ========================
@@ -460,6 +469,7 @@ const App = (function () {
     if (!layer) {
       emptyEl.classList.remove('hidden');
       wrapEl.classList.add('hidden');
+      CanvasEngine.setShowPanelNumbers(false);
       return;
     }
 
@@ -470,27 +480,29 @@ const App = (function () {
 
   function buildPanelSelector(container) {
     container.innerHTML = '';
-    if (!currentModel || !currentModel.panels) return;
+    if (!currentModel) return;
 
-    const panels = currentModel.panels;
+    const grid = CanvasEngine.getGridSize();
     const layer = CanvasEngine.getSelectedLayer();
-    const selected = layer ? layer.selectedPanels : null; // null = no selection = show everywhere
+    const selected = layer ? layer.selectedPanels : null;
 
-    panels.forEach((p, idx) => {
+    // Show numbers on canvas when panel selector is visible
+    CanvasEngine.setShowPanelNumbers(true);
+
+    for (let i = 0; i < grid.total; i++) {
       const label = document.createElement('label');
-      const isChecked = selected && selected.includes(idx);
+      const isChecked = selected && selected.includes(i);
       label.className = 'panel-check' + (isChecked ? ' checked' : '');
-      label.title = p.label;
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = isChecked;
-      cb.dataset.idx = idx;
+      cb.dataset.idx = i;
       const span = document.createElement('span');
-      span.textContent = (idx + 1);
+      span.textContent = (i + 1);
       label.appendChild(cb);
       label.appendChild(span);
       container.appendChild(label);
-    });
+    }
 
     container.addEventListener('change', () => {
       const checked = container.querySelectorAll('input[type="checkbox"]:checked');

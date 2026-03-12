@@ -38,6 +38,9 @@ const CanvasEngine = (function () {
   };
 
   let checkerPattern = null;
+  let showPanelNumbers = false;
+  const GRID_COLS = 3;
+  const GRID_ROWS = 3;
 
   // ========================
   // Init
@@ -492,6 +495,44 @@ const CanvasEngine = (function () {
 
     renderOffscreen();
     displayCtx.drawImage(offscreen, 0, 0, cssW, cssH);
+
+    if (showPanelNumbers) {
+      drawPanelNumbers(displayCtx, cssW, cssH);
+    }
+  }
+
+  function drawPanelNumbers(ctx, w, h) {
+    const cellW = w / GRID_COLS;
+    const cellH = h / GRID_ROWS;
+    const fontSize = Math.max(14, Math.min(cellW, cellH) * 0.3);
+    ctx.save();
+    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        const idx = row * GRID_COLS + col;
+        const cx = col * cellW + cellW / 2;
+        const cy = row * cellH + cellH / 2;
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(col * cellW, row * cellH, cellW, cellH);
+
+        // Number badge
+        const r = fontSize * 0.7;
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.fillText(idx + 1, cx, cy);
+      }
+    }
+    ctx.restore();
   }
 
   function renderOffscreen() {
@@ -515,23 +556,15 @@ const CanvasEngine = (function () {
         userLayerCtx.globalAlpha = layer.opacity;
         userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
 
-        // Per-layer panel clip (restrict to selected panels only)
-        if (layer.selectedPanels && layer.selectedPanels.length > 0 && currentModel) {
+        // Per-layer grid clip (restrict to selected grid cells only)
+        if (layer.selectedPanels && layer.selectedPanels.length > 0) {
+          const cellW = w / GRID_COLS;
+          const cellH = h / GRID_ROWS;
           userLayerCtx.beginPath();
           for (const idx of layer.selectedPanels) {
-            const p = currentModel.panels[idx];
-            if (!p) continue;
-            const r = Math.min(w, h) * 0.012;
-            const px = p.x * w, py = p.y * h, pw = p.w * w, ph = p.h * h;
-            userLayerCtx.moveTo(px + r, py);
-            userLayerCtx.lineTo(px + pw - r, py);
-            userLayerCtx.quadraticCurveTo(px + pw, py, px + pw, py + r);
-            userLayerCtx.lineTo(px + pw, py + ph - r);
-            userLayerCtx.quadraticCurveTo(px + pw, py + ph, px + pw - r, py + ph);
-            userLayerCtx.lineTo(px + r, py + ph);
-            userLayerCtx.quadraticCurveTo(px, py + ph, px, py + ph - r);
-            userLayerCtx.lineTo(px, py + r);
-            userLayerCtx.quadraticCurveTo(px, py, px + r, py);
+            const col = idx % GRID_COLS;
+            const row = Math.floor(idx / GRID_COLS);
+            userLayerCtx.rect(col * cellW, row * cellH, cellW, cellH);
           }
           userLayerCtx.clip();
         }
@@ -705,6 +738,8 @@ const CanvasEngine = (function () {
     clearLayers,
     hasLayers,
     getCurrentModel: () => currentModel,
+    getGridSize: () => ({ cols: GRID_COLS, rows: GRID_ROWS, total: GRID_COLS * GRID_ROWS }),
+    setShowPanelNumbers: (v) => { showPanelNumbers = v; render(); },
     // Rendering
     render,
     exportPNG,

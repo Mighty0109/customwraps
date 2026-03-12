@@ -622,7 +622,7 @@ const CanvasEngine = (function () {
       const cx = centroid.x * w;
       const cy = centroid.y * h;
 
-      const fontSize = Math.max(12, Math.min(w, h) * 0.035);
+      const fontSize = 9;
       ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
 
       // Number badge

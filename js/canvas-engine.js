@@ -40,6 +40,7 @@ const CanvasEngine = (function () {
   let checkerPattern = null;
   let showPanelNumbers = false;
   let panelMasks = [];  // per-panel flood-fill masks
+  let panelCentroids = [];  // actual center of each panel's filled area {x, y} in 0..1
   let tempLayerCanvas = null;
   let tempLayerCtx = null;
 
@@ -458,6 +459,7 @@ const CanvasEngine = (function () {
 
   function generatePanelMasks() {
     panelMasks = [];
+    panelCentroids = [];
     if (!templateImage || !currentModel || !currentModel.panels) return;
 
     const w = internalWidth;
@@ -536,6 +538,20 @@ const CanvasEngine = (function () {
           }
         }
       }
+
+      // Compute centroid of filled area
+      let sumX = 0, sumY = 0, count = 0;
+      for (let i = 0; i < w * h; i++) {
+        if (filled[i]) {
+          sumX += i % w;
+          sumY += Math.floor(i / w);
+          count++;
+        }
+      }
+      panelCentroids.push(count > 0
+        ? { x: (sumX / count) / w, y: (sumY / count) / h }
+        : { x: p.x + p.w / 2, y: p.y + p.h / 2 }
+      );
 
       // Create mask canvas for this panel
       const mc = document.createElement('canvas');
@@ -616,13 +632,13 @@ const CanvasEngine = (function () {
 
     for (let i = 0; i < panels.length; i++) {
       const p = panels[i];
-      const px = p.x * w;
-      const py = p.y * h;
+      // Use flood-fill centroid if available, otherwise fallback to rect center
+      const centroid = panelCentroids[i];
+      const cx = centroid ? centroid.x * w : (p.x + p.w / 2) * w;
+      const cy = centroid ? centroid.y * h : (p.y + p.h / 2) * h;
+
       const pw = p.w * w;
       const ph = p.h * h;
-      const cx = px + pw / 2;
-      const cy = py + ph / 2;
-
       const fontSize = Math.max(12, Math.min(pw, ph) * 0.28);
       ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
 

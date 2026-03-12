@@ -474,76 +474,32 @@ const App = (function () {
 
     const panels = currentModel.panels;
     const layer = CanvasEngine.getSelectedLayer();
-    const selected = layer ? layer.selectedPanels : null;
-    const allSelected = !selected; // null means all
+    const selected = layer ? layer.selectedPanels : null; // null = no selection = show everywhere
 
-    // "전체" (All) toggle
-    const allLabel = document.createElement('label');
-    allLabel.className = 'panel-check' + (allSelected ? ' checked' : '');
-    const allCb = document.createElement('input');
-    allCb.type = 'checkbox';
-    allCb.checked = allSelected;
-    const allSpan = document.createElement('span');
-    allSpan.textContent = '전체 (All)';
-    allLabel.appendChild(allCb);
-    allLabel.appendChild(allSpan);
-    container.appendChild(allLabel);
-
-    // Individual panel checkboxes
-    const checkboxes = [];
     panels.forEach((p, idx) => {
       const label = document.createElement('label');
-      label.className = 'panel-check' + (allSelected || (selected && selected.includes(idx)) ? ' checked' : '');
+      const isChecked = selected && selected.includes(idx);
+      label.className = 'panel-check' + (isChecked ? ' checked' : '');
+      label.title = p.label;
       const cb = document.createElement('input');
       cb.type = 'checkbox';
-      cb.checked = allSelected || (selected && selected.includes(idx));
-      cb.disabled = allSelected;
+      cb.checked = isChecked;
       cb.dataset.idx = idx;
       const span = document.createElement('span');
-      span.textContent = p.label;
+      span.textContent = (idx + 1);
       label.appendChild(cb);
       label.appendChild(span);
       container.appendChild(label);
-      checkboxes.push({ cb, label });
     });
 
-    // "All" checkbox handler
-    allCb.addEventListener('change', () => {
-      if (allCb.checked) {
-        allLabel.classList.add('checked');
-        checkboxes.forEach(({ cb, label }) => {
-          cb.checked = true;
-          cb.disabled = true;
-          label.classList.add('checked');
-        });
-        updateSelectedLayer({ selectedPanels: null });
-      } else {
-        allLabel.classList.remove('checked');
-        checkboxes.forEach(({ cb }) => { cb.disabled = false; });
-      }
-    });
-
-    // Individual checkbox handler
-    checkboxes.forEach(({ cb, label }) => {
-      cb.addEventListener('change', () => {
-        label.classList.toggle('checked', cb.checked);
-        const indices = [];
-        checkboxes.forEach(({ cb: c }, i) => {
-          if (c.checked) indices.push(parseInt(c.dataset.idx));
-        });
-        if (indices.length === 0 || indices.length === panels.length) {
-          allCb.checked = true;
-          allLabel.classList.add('checked');
-          checkboxes.forEach(({ cb: c, label: l }) => {
-            c.checked = true;
-            c.disabled = true;
-            l.classList.add('checked');
-          });
-          updateSelectedLayer({ selectedPanels: null });
-        } else {
-          updateSelectedLayer({ selectedPanels: indices });
-        }
+    container.addEventListener('change', () => {
+      const checked = container.querySelectorAll('input[type="checkbox"]:checked');
+      const indices = Array.from(checked).map(cb => parseInt(cb.dataset.idx));
+      container.querySelectorAll('.panel-check').forEach(l => {
+        const cb = l.querySelector('input');
+        l.classList.toggle('checked', cb.checked);
       });
+      updateSelectedLayer({ selectedPanels: indices.length > 0 ? indices : null });
     });
   }
 

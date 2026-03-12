@@ -481,24 +481,9 @@ const CanvasEngine = (function () {
       bright[i] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
     }
 
-    // Morphological erosion: thicken boundary lines to prevent leaking
-    const EROSION_R = 2;
-    const eroded = new Float32Array(w * h);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        let minVal = 255;
-        const y0 = Math.max(0, y - EROSION_R), y1 = Math.min(h - 1, y + EROSION_R);
-        const x0 = Math.max(0, x - EROSION_R), x1 = Math.min(w - 1, x + EROSION_R);
-        for (let ny = y0; ny <= y1; ny++) {
-          for (let nx = x0; nx <= x1; nx++) {
-            minVal = Math.min(minVal, bright[ny * w + nx]);
-          }
-        }
-        eroded[y * w + x] = minVal;
-      }
-    }
-
-    const THRESHOLD = 200;
+    // High threshold treats anti-aliased boundary pixels as walls
+    // (no expensive erosion needed)
+    const THRESHOLD = 245;
     const MIN_REGION_PIXELS = 500;
 
     // Connected-component labeling: auto-detect all panel regions
@@ -509,7 +494,7 @@ const CanvasEngine = (function () {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const idx = y * w + x;
-        if (eroded[idx] >= THRESHOLD && labels[idx] === 0) {
+        if (bright[idx] >= THRESHOLD && labels[idx] === 0) {
           const label = nextLabel++;
           let count = 0, sumX = 0, sumY = 0;
           const queue = [idx];
@@ -524,10 +509,10 @@ const CanvasEngine = (function () {
             sumX += cx;
             sumY += cy;
 
-            if (cy > 0     && labels[ci - w] === 0 && eroded[ci - w] >= THRESHOLD) { labels[ci - w] = label; queue.push(ci - w); }
-            if (cy < h - 1 && labels[ci + w] === 0 && eroded[ci + w] >= THRESHOLD) { labels[ci + w] = label; queue.push(ci + w); }
-            if (cx > 0     && labels[ci - 1] === 0 && eroded[ci - 1] >= THRESHOLD) { labels[ci - 1] = label; queue.push(ci - 1); }
-            if (cx < w - 1 && labels[ci + 1] === 0 && eroded[ci + 1] >= THRESHOLD) { labels[ci + 1] = label; queue.push(ci + 1); }
+            if (cy > 0     && labels[ci - w] === 0 && bright[ci - w] >= THRESHOLD) { labels[ci - w] = label; queue.push(ci - w); }
+            if (cy < h - 1 && labels[ci + w] === 0 && bright[ci + w] >= THRESHOLD) { labels[ci + w] = label; queue.push(ci + w); }
+            if (cx > 0     && labels[ci - 1] === 0 && bright[ci - 1] >= THRESHOLD) { labels[ci - 1] = label; queue.push(ci - 1); }
+            if (cx < w - 1 && labels[ci + 1] === 0 && bright[ci + 1] >= THRESHOLD) { labels[ci + 1] = label; queue.push(ci + 1); }
           }
 
           if (count >= MIN_REGION_PIXELS) {

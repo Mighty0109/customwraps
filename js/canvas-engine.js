@@ -39,6 +39,9 @@ const CanvasEngine = (function () {
 
   let checkerPattern = null;
   let showPanelNumbers = false;
+  let panelMasks = [];  // per-panel flood-fill masks
+  let tempLayerCanvas = null;
+  let tempLayerCtx = null;
 
   // ========================
   // Init
@@ -410,6 +413,7 @@ const CanvasEngine = (function () {
       internalSize = Math.max(internalWidth, internalHeight);
       resizeInternalCanvases();
       generateMask();
+      generatePanelMasks();
       render();
     }).catch(() => {
       console.warn('Real template not found, using placeholder');
@@ -419,6 +423,7 @@ const CanvasEngine = (function () {
       resizeInternalCanvases();
       templateImage = generatePlaceholderTemplate(model, internalSize);
       generateMask();
+      generatePanelMasks();
       render();
     });
   }
@@ -449,6 +454,108 @@ const CanvasEngine = (function () {
       d[i + 3] = Math.round(brightness);
     }
     mCtx.putImageData(imageData, 0, 0);
+  }
+
+  function generatePanelMasks() {
+    panelMasks = [];
+    if (!templateImage || !currentModel || !currentModel.panels) return;
+
+    const w = internalWidth;
+    const h = internalHeight;
+
+    // Get template brightness data
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = w;
+    tempCanvas.height = h;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(templateImage, 0, 0, w, h);
+    const imageData = tempCtx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+
+    // Build brightness array
+    const bright = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      const idx = i * 4;
+      bright[i] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
+    }
+
+    const THRESHOLD = 180;
+
+    for (let pi = 0; pi < currentModel.panels.length; pi++) {
+      const p = currentModel.panels[pi];
+      let cx = Math.round((p.x + p.w / 2) * w);
+      let cy = Math.round((p.y + p.h / 2) * h);
+
+      // Ensure starting point is on a bright pixel; search nearby if not
+      if (bright[cy * w + cx] < THRESHOLD) {
+        let found = false;
+        for (let r = 1; r < 50 && !found; r++) {
+          for (let dy = -r; dy <= r && !found; dy++) {
+            for (let dx = -r; dx <= r && !found; dx++) {
+              const nx = cx + dx, ny = cy + dy;
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h && bright[ny * w + nx] >= THRESHOLD) {
+                cx = nx; cy = ny; found = true;
+              }
+            }
+          }
+        }
+      }
+
+      // BFS flood fill from center within expanded bounds
+      const filled = new Uint8Array(w * h);
+      const margin = 20;
+      const minX = Math.max(0, Math.floor(p.x * w) - margin);
+      const maxX = Math.min(w - 1, Math.ceil((p.x + p.w) * w) + margin);
+      const minY = Math.max(0, Math.floor(p.y * h) - margin);
+      const maxY = Math.min(h - 1, Math.ceil((p.y + p.h) * h) + margin);
+
+      const queue = new Int32Array(w * h);
+      let head = 0, tail = 0;
+      const startIdx = cy * w + cx;
+      if (cx >= 0 && cx < w && cy >= 0 && cy < h && bright[startIdx] >= THRESHOLD) {
+        queue[tail++] = startIdx;
+        filled[startIdx] = 1;
+      }
+
+      while (head < tail) {
+        const idx = queue[head++];
+        const x = idx % w;
+        const y = (idx - x) / w;
+
+        const neighbors = [
+          y > minY ? idx - w : -1,
+          y < maxY ? idx + w : -1,
+          x > minX ? idx - 1 : -1,
+          x < maxX ? idx + 1 : -1,
+        ];
+
+        for (const nIdx of neighbors) {
+          if (nIdx >= 0 && !filled[nIdx] && bright[nIdx] >= THRESHOLD) {
+            filled[nIdx] = 1;
+            queue[tail++] = nIdx;
+          }
+        }
+      }
+
+      // Create mask canvas for this panel
+      const mc = document.createElement('canvas');
+      mc.width = w;
+      mc.height = h;
+      const mCtx = mc.getContext('2d');
+      const maskData = mCtx.createImageData(w, h);
+      const md = maskData.data;
+
+      for (let i = 0; i < w * h; i++) {
+        const mi = i * 4;
+        md[mi] = 255;
+        md[mi + 1] = 255;
+        md[mi + 2] = 255;
+        md[mi + 3] = filled[i] ? Math.round(bright[i]) : 0;
+      }
+
+      mCtx.putImageData(maskData, 0, 0);
+      panelMasks.push(mc);
+    }
   }
 
   // ========================
@@ -548,32 +655,65 @@ const CanvasEngine = (function () {
       }
       userLayerCtx.clearRect(0, 0, w, h);
 
+      // Ensure temp canvas for per-panel masking
+      if (!tempLayerCanvas || tempLayerCanvas.width !== w || tempLayerCanvas.height !== h) {
+        tempLayerCanvas = document.createElement('canvas');
+        tempLayerCanvas.width = w;
+        tempLayerCanvas.height = h;
+        tempLayerCtx = tempLayerCanvas.getContext('2d');
+      }
+
       for (const layer of visibleLayers) {
-        userLayerCtx.save();
-        userLayerCtx.globalAlpha = layer.opacity;
-        userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
+        const usePanelMask = layer.selectedPanels && layer.selectedPanels.length > 0
+          && currentModel && panelMasks.length > 0;
 
-        // Per-layer panel clip (restrict to selected panels only)
-        if (layer.selectedPanels && layer.selectedPanels.length > 0 && currentModel) {
-          userLayerCtx.beginPath();
-          for (const idx of layer.selectedPanels) {
-            const p = currentModel.panels[idx];
-            if (!p) continue;
-            userLayerCtx.rect(p.x * w, p.y * h, p.w * w, p.h * h);
+        if (usePanelMask) {
+          // Render layer content to temp canvas
+          tempLayerCtx.clearRect(0, 0, w, h);
+          tempLayerCtx.save();
+          tempLayerCtx.globalAlpha = layer.opacity;
+
+          if (layer.backgroundColor) {
+            tempLayerCtx.fillStyle = layer.backgroundColor;
+            tempLayerCtx.fillRect(0, 0, w, h);
           }
-          userLayerCtx.clip();
-        }
+          if (layer.image) {
+            drawLayerImage(tempLayerCtx, w, h, layer);
+          }
+          tempLayerCtx.restore();
 
-        if (layer.backgroundColor) {
-          userLayerCtx.fillStyle = layer.backgroundColor;
-          userLayerCtx.fillRect(0, 0, w, h);
-        }
+          // Build combined panel mask and apply via destination-in
+          tempLayerCtx.save();
+          tempLayerCtx.globalCompositeOperation = 'destination-in';
+          // Draw all selected panel masks (additive - source-over for alpha union)
+          for (const idx of layer.selectedPanels) {
+            if (panelMasks[idx]) {
+              tempLayerCtx.drawImage(panelMasks[idx], 0, 0);
+            }
+          }
+          tempLayerCtx.restore();
 
-        if (layer.image) {
-          drawLayerImage(userLayerCtx, w, h, layer);
-        }
+          // Composite masked layer onto userLayerCanvas
+          userLayerCtx.save();
+          userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
+          userLayerCtx.drawImage(tempLayerCanvas, 0, 0);
+          userLayerCtx.restore();
+        } else {
+          // No panel selection - render directly
+          userLayerCtx.save();
+          userLayerCtx.globalAlpha = layer.opacity;
+          userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
 
-        userLayerCtx.restore();
+          if (layer.backgroundColor) {
+            userLayerCtx.fillStyle = layer.backgroundColor;
+            userLayerCtx.fillRect(0, 0, w, h);
+          }
+          if (layer.image) {
+            drawLayerImage(userLayerCtx, w, h, layer);
+          }
+
+          userLayerCtx.restore();
+        }
       }
 
       if (maskCanvas) {

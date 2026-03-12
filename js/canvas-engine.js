@@ -43,6 +43,8 @@ const CanvasEngine = (function () {
   let panelCentroids = [];  // actual center of each panel's filled area {x, y} in 0..1
   let tempLayerCanvas = null;
   let tempLayerCtx = null;
+  let combinedMaskCanvas = null;
+  let combinedMaskCtx = null;
 
   // ========================
   // Init
@@ -665,6 +667,23 @@ const CanvasEngine = (function () {
           && currentModel && panelMasks.length > 0;
 
         if (usePanelMask) {
+          // Build combined mask (union of selected panels) on temp canvas
+          tempLayerCtx.clearRect(0, 0, w, h);
+          for (const idx of layer.selectedPanels) {
+            if (panelMasks[idx]) {
+              tempLayerCtx.drawImage(panelMasks[idx], 0, 0);
+            }
+          }
+          // Copy combined mask to a second canvas
+          if (!combinedMaskCanvas || combinedMaskCanvas.width !== w || combinedMaskCanvas.height !== h) {
+            combinedMaskCanvas = document.createElement('canvas');
+            combinedMaskCanvas.width = w;
+            combinedMaskCanvas.height = h;
+            combinedMaskCtx = combinedMaskCanvas.getContext('2d');
+          }
+          combinedMaskCtx.clearRect(0, 0, w, h);
+          combinedMaskCtx.drawImage(tempLayerCanvas, 0, 0);
+
           // Render layer content to temp canvas
           tempLayerCtx.clearRect(0, 0, w, h);
           tempLayerCtx.save();
@@ -679,15 +698,10 @@ const CanvasEngine = (function () {
           }
           tempLayerCtx.restore();
 
-          // Build combined panel mask and apply via destination-in
+          // Apply combined mask via destination-in
           tempLayerCtx.save();
           tempLayerCtx.globalCompositeOperation = 'destination-in';
-          // Draw all selected panel masks (additive - source-over for alpha union)
-          for (const idx of layer.selectedPanels) {
-            if (panelMasks[idx]) {
-              tempLayerCtx.drawImage(panelMasks[idx], 0, 0);
-            }
-          }
+          tempLayerCtx.drawImage(combinedMaskCanvas, 0, 0);
           tempLayerCtx.restore();
 
           // Composite masked layer onto userLayerCanvas

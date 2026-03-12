@@ -664,17 +664,10 @@ const CanvasEngine = (function () {
 
       for (const layer of visibleLayers) {
         const usePanelMask = layer.selectedPanels && layer.selectedPanels.length > 0
-          && currentModel && panelMasks.length > 0;
+          && panelMasks.length > 0;
 
         if (usePanelMask) {
-          // Build combined mask (union of selected panels) on temp canvas
-          tempLayerCtx.clearRect(0, 0, w, h);
-          for (const idx of layer.selectedPanels) {
-            if (panelMasks[idx]) {
-              tempLayerCtx.drawImage(panelMasks[idx], 0, 0);
-            }
-          }
-          // Copy combined mask to a second canvas
+          // 1) Build combined mask (union) on combinedMaskCanvas
           if (!combinedMaskCanvas || combinedMaskCanvas.width !== w || combinedMaskCanvas.height !== h) {
             combinedMaskCanvas = document.createElement('canvas');
             combinedMaskCanvas.width = w;
@@ -682,47 +675,36 @@ const CanvasEngine = (function () {
             combinedMaskCtx = combinedMaskCanvas.getContext('2d');
           }
           combinedMaskCtx.clearRect(0, 0, w, h);
-          combinedMaskCtx.drawImage(tempLayerCanvas, 0, 0);
+          for (const idx of layer.selectedPanels) {
+            if (panelMasks[idx]) {
+              combinedMaskCtx.drawImage(panelMasks[idx], 0, 0);
+            }
+          }
 
-          // Render layer content to temp canvas
+          // 2) Render layer image on tempLayerCanvas
           tempLayerCtx.clearRect(0, 0, w, h);
           tempLayerCtx.save();
           tempLayerCtx.globalAlpha = layer.opacity;
-
-          if (layer.backgroundColor) {
-            tempLayerCtx.fillStyle = layer.backgroundColor;
-            tempLayerCtx.fillRect(0, 0, w, h);
-          }
           if (layer.image) {
             drawLayerImage(tempLayerCtx, w, h, layer);
           }
           tempLayerCtx.restore();
 
-          // Apply combined mask via destination-in
+          // 3) Clip to combined mask
           tempLayerCtx.save();
           tempLayerCtx.globalCompositeOperation = 'destination-in';
           tempLayerCtx.drawImage(combinedMaskCanvas, 0, 0);
           tempLayerCtx.restore();
 
-          // Composite masked layer onto userLayerCanvas
-          userLayerCtx.save();
-          userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
+          // 4) Draw onto userLayerCanvas
           userLayerCtx.drawImage(tempLayerCanvas, 0, 0);
-          userLayerCtx.restore();
         } else {
           // No panel selection - render directly
           userLayerCtx.save();
           userLayerCtx.globalAlpha = layer.opacity;
-          userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
-
-          if (layer.backgroundColor) {
-            userLayerCtx.fillStyle = layer.backgroundColor;
-            userLayerCtx.fillRect(0, 0, w, h);
-          }
           if (layer.image) {
             drawLayerImage(userLayerCtx, w, h, layer);
           }
-
           userLayerCtx.restore();
         }
       }

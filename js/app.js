@@ -292,43 +292,6 @@ const App = (function () {
     wrap.className = 'controls-wrap';
     wrap.id = 'controls-wrap';
 
-    // Blend mode
-    const blendLabel = document.createElement('div');
-    blendLabel.className = 'control-section-label';
-    blendLabel.textContent = '블렌드 모드';
-    wrap.appendChild(blendLabel);
-
-    const blendSelect = document.createElement('select');
-    blendSelect.className = 'blend-mode-select';
-    const blendModes = [
-      { value: 'source-over', label: '일반 (Normal)' },
-      { value: 'multiply', label: '곱하기 (Multiply)' },
-      { value: 'screen', label: '스크린 (Screen)' },
-      { value: 'overlay', label: '오버레이 (Overlay)' },
-      { value: 'darken', label: '어둡게 (Darken)' },
-      { value: 'lighten', label: '밝게 (Lighten)' },
-      { value: 'color-dodge', label: '색상 닷지' },
-      { value: 'color-burn', label: '색상 번' },
-      { value: 'hard-light', label: '하드 라이트' },
-      { value: 'soft-light', label: '소프트 라이트' },
-      { value: 'difference', label: '차이 (Difference)' },
-      { value: 'exclusion', label: '제외 (Exclusion)' },
-    ];
-    blendModes.forEach(bm => {
-      const opt = document.createElement('option');
-      opt.value = bm.value;
-      opt.textContent = bm.label;
-      blendSelect.appendChild(opt);
-    });
-    blendSelect.addEventListener('change', () => {
-      updateSelectedLayer({ blendMode: blendSelect.value });
-    });
-    controlRefs.blendMode = {
-      el: blendSelect,
-      setValue: (v) => { blendSelect.value = v; }
-    };
-    wrap.appendChild(blendSelect);
-
     // Panel selection
     const panelLabel = document.createElement('div');
     panelLabel.className = 'control-section-label';
@@ -495,7 +458,6 @@ const App = (function () {
     if (controlRefs.offsetX) controlRefs.offsetX.updateValue(Math.round(layer.offsetX));
     if (controlRefs.offsetY) controlRefs.offsetY.updateValue(Math.round(layer.offsetY));
 
-    if (controlRefs.blendMode) controlRefs.blendMode.setValue(layer.blendMode || 'source-over');
     if (controlRefs.panelSelector) controlRefs.panelSelector.rebuild();
   }
 

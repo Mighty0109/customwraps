@@ -329,50 +329,6 @@ const App = (function () {
     };
     wrap.appendChild(blendSelect);
 
-    // Background color
-    const bgLabel = document.createElement('div');
-    bgLabel.className = 'control-section-label';
-    bgLabel.style.marginTop = '16px';
-    bgLabel.textContent = '배경색';
-    wrap.appendChild(bgLabel);
-
-    const bgRow = document.createElement('div');
-    bgRow.className = 'bg-color-row';
-
-    const bgNoneBtn = document.createElement('button');
-    bgNoneBtn.className = 'btn btn-sm bg-color-none active';
-    bgNoneBtn.textContent = '없음';
-
-    const bgColorInput = document.createElement('input');
-    bgColorInput.type = 'color';
-    bgColorInput.className = 'bg-color-input';
-    bgColorInput.value = '#ffffff';
-
-    bgNoneBtn.addEventListener('click', () => {
-      bgNoneBtn.classList.add('active');
-      updateSelectedLayer({ backgroundColor: null });
-    });
-
-    bgColorInput.addEventListener('input', () => {
-      bgNoneBtn.classList.remove('active');
-      updateSelectedLayer({ backgroundColor: bgColorInput.value });
-    });
-
-    controlRefs.bgColor = {
-      update: (val) => {
-        if (val) {
-          bgNoneBtn.classList.remove('active');
-          bgColorInput.value = val;
-        } else {
-          bgNoneBtn.classList.add('active');
-        }
-      }
-    };
-
-    bgRow.appendChild(bgNoneBtn);
-    bgRow.appendChild(bgColorInput);
-    wrap.appendChild(bgRow);
-
     // Panel selection
     const panelLabel = document.createElement('div');
     panelLabel.className = 'control-section-label';
@@ -525,7 +481,6 @@ const App = (function () {
     if (controlRefs.offsetY) controlRefs.offsetY.updateValue(Math.round(layer.offsetY));
 
     if (controlRefs.blendMode) controlRefs.blendMode.setValue(layer.blendMode || 'source-over');
-    if (controlRefs.bgColor) controlRefs.bgColor.update(layer.backgroundColor);
     if (controlRefs.panelSelector) controlRefs.panelSelector.rebuild();
   }
 

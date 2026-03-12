@@ -460,7 +460,7 @@ const CanvasEngine = (function () {
   function generatePanelMasks() {
     panelMasks = [];
     panelCentroids = [];
-    if (!templateImage || !currentModel || !currentModel.panels) return;
+    if (!templateImage) return;
 
     const w = internalWidth;
     const h = internalHeight;
@@ -481,8 +481,7 @@ const CanvasEngine = (function () {
       bright[i] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
     }
 
-    // Morphological erosion: thicken boundary lines so flood-fill can't leak
-    // through anti-aliased edges
+    // Morphological erosion: thicken boundary lines to prevent leaking
     const EROSION_R = 2;
     const eroded = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
@@ -500,78 +499,62 @@ const CanvasEngine = (function () {
     }
 
     const THRESHOLD = 200;
+    const MIN_REGION_PIXELS = 500;
 
-    for (let pi = 0; pi < currentModel.panels.length; pi++) {
-      const p = currentModel.panels[pi];
-      let cx = Math.round((p.x + p.w / 2) * w);
-      let cy = Math.round((p.y + p.h / 2) * h);
+    // Connected-component labeling: auto-detect all panel regions
+    const labels = new Int32Array(w * h);
+    let nextLabel = 1;
+    const regions = [];
 
-      // Ensure starting point is on a bright pixel; search nearby if not
-      if (eroded[cy * w + cx] < THRESHOLD) {
-        let found = false;
-        for (let r = 1; r < 50 && !found; r++) {
-          for (let dy = -r; dy <= r && !found; dy++) {
-            for (let dx = -r; dx <= r && !found; dx++) {
-              const nx = cx + dx, ny = cy + dy;
-              if (nx >= 0 && nx < w && ny >= 0 && ny < h && eroded[ny * w + nx] >= THRESHOLD) {
-                cx = nx; cy = ny; found = true;
-              }
-            }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = y * w + x;
+        if (eroded[idx] >= THRESHOLD && labels[idx] === 0) {
+          const label = nextLabel++;
+          let count = 0, sumX = 0, sumY = 0;
+          const queue = [idx];
+          labels[idx] = label;
+          let head = 0;
+
+          while (head < queue.length) {
+            const ci = queue[head++];
+            const cx = ci % w;
+            const cy = (ci - cx) / w;
+            count++;
+            sumX += cx;
+            sumY += cy;
+
+            if (cy > 0     && labels[ci - w] === 0 && eroded[ci - w] >= THRESHOLD) { labels[ci - w] = label; queue.push(ci - w); }
+            if (cy < h - 1 && labels[ci + w] === 0 && eroded[ci + w] >= THRESHOLD) { labels[ci + w] = label; queue.push(ci + w); }
+            if (cx > 0     && labels[ci - 1] === 0 && eroded[ci - 1] >= THRESHOLD) { labels[ci - 1] = label; queue.push(ci - 1); }
+            if (cx < w - 1 && labels[ci + 1] === 0 && eroded[ci + 1] >= THRESHOLD) { labels[ci + 1] = label; queue.push(ci + 1); }
+          }
+
+          if (count >= MIN_REGION_PIXELS) {
+            regions.push({ label, count, sumX, sumY });
           }
         }
       }
+    }
 
-      // BFS flood fill using eroded brightness (prevents leaking through thin lines)
-      const filled = new Uint8Array(w * h);
-      const margin = 10;
-      const minX = Math.max(0, Math.floor(p.x * w) - margin);
-      const maxX = Math.min(w - 1, Math.ceil((p.x + p.w) * w) + margin);
-      const minY = Math.max(0, Math.floor(p.y * h) - margin);
-      const maxY = Math.min(h - 1, Math.ceil((p.y + p.h) * h) + margin);
+    // Sort: top-to-bottom rows, then left-to-right within each row
+    const ROW_HEIGHT = h * 0.08;
+    regions.sort((a, b) => {
+      const ay = a.sumY / a.count;
+      const by = b.sumY / b.count;
+      const aRow = Math.floor(ay / ROW_HEIGHT);
+      const bRow = Math.floor(by / ROW_HEIGHT);
+      if (aRow !== bRow) return aRow - bRow;
+      return (a.sumX / a.count) - (b.sumX / b.count);
+    });
 
-      const queue = new Int32Array(w * h);
-      let head = 0, tail = 0;
-      const startIdx = cy * w + cx;
-      if (cx >= 0 && cx < w && cy >= 0 && cy < h && eroded[startIdx] >= THRESHOLD) {
-        queue[tail++] = startIdx;
-        filled[startIdx] = 1;
-      }
+    // Generate mask and centroid for each detected region
+    for (const region of regions) {
+      panelCentroids.push({
+        x: (region.sumX / region.count) / w,
+        y: (region.sumY / region.count) / h,
+      });
 
-      while (head < tail) {
-        const idx = queue[head++];
-        const x = idx % w;
-        const y = (idx - x) / w;
-
-        const neighbors = [
-          y > minY ? idx - w : -1,
-          y < maxY ? idx + w : -1,
-          x > minX ? idx - 1 : -1,
-          x < maxX ? idx + 1 : -1,
-        ];
-
-        for (const nIdx of neighbors) {
-          if (nIdx >= 0 && !filled[nIdx] && eroded[nIdx] >= THRESHOLD) {
-            filled[nIdx] = 1;
-            queue[tail++] = nIdx;
-          }
-        }
-      }
-
-      // Compute centroid of filled area
-      let sumX = 0, sumY = 0, count = 0;
-      for (let i = 0; i < w * h; i++) {
-        if (filled[i]) {
-          sumX += i % w;
-          sumY += Math.floor(i / w);
-          count++;
-        }
-      }
-      panelCentroids.push(count > 0
-        ? { x: (sumX / count) / w, y: (sumY / count) / h }
-        : { x: p.x + p.w / 2, y: p.y + p.h / 2 }
-      );
-
-      // Create mask canvas for this panel
       const mc = document.createElement('canvas');
       mc.width = w;
       mc.height = h;
@@ -584,7 +567,7 @@ const CanvasEngine = (function () {
         md[mi] = 255;
         md[mi + 1] = 255;
         md[mi + 2] = 255;
-        md[mi + 3] = filled[i] ? Math.round(bright[i]) : 0;
+        md[mi + 3] = labels[i] === region.label ? Math.round(bright[i]) : 0;
       }
 
       mCtx.putImageData(maskData, 0, 0);
@@ -679,22 +662,18 @@ const CanvasEngine = (function () {
   }
 
   function drawPanelNumbers(ctx, w, h) {
-    if (!currentModel || !currentModel.panels) return;
-    const panels = currentModel.panels;
+    if (!panelCentroids.length) return;
 
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    for (let i = 0; i < panels.length; i++) {
-      const p = panels[i];
+    for (let i = 0; i < panelCentroids.length; i++) {
       const centroid = panelCentroids[i];
-      const cx = centroid ? centroid.x * w : (p.x + p.w / 2) * w;
-      const cy = centroid ? centroid.y * h : (p.y + p.h / 2) * h;
+      const cx = centroid.x * w;
+      const cy = centroid.y * h;
 
-      const pw = p.w * w;
-      const ph = p.h * h;
-      const fontSize = Math.max(12, Math.min(pw, ph) * 0.28);
+      const fontSize = Math.max(12, Math.min(w, h) * 0.035);
       ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
 
       // Number badge
@@ -944,7 +923,7 @@ const CanvasEngine = (function () {
     clearLayers,
     hasLayers,
     getCurrentModel: () => currentModel,
-    getPanelCount: () => currentModel && currentModel.panels ? currentModel.panels.length : 0,
+    getPanelCount: () => panelMasks.length,
     setShowPanelNumbers: (v) => { showPanelNumbers = v; render(); },
     // Rendering
     render,

@@ -482,14 +482,15 @@ const App = (function () {
     container.innerHTML = '';
     if (!currentModel) return;
 
-    const grid = CanvasEngine.getGridSize();
+    const count = CanvasEngine.getPanelCount();
+    if (count === 0) return;
     const layer = CanvasEngine.getSelectedLayer();
     const selected = layer ? layer.selectedPanels : null;
 
     // Show numbers on canvas when panel selector is visible
     CanvasEngine.setShowPanelNumbers(true);
 
-    for (let i = 0; i < grid.total; i++) {
+    for (let i = 0; i < count; i++) {
       const label = document.createElement('label');
       const isChecked = selected && selected.includes(i);
       label.className = 'panel-check' + (isChecked ? ' checked' : '');

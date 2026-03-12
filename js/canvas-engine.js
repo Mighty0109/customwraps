@@ -39,8 +39,6 @@ const CanvasEngine = (function () {
 
   let checkerPattern = null;
   let showPanelNumbers = false;
-  const GRID_COLS = 3;
-  const GRID_ROWS = 3;
 
   // ========================
   // Init
@@ -502,35 +500,34 @@ const CanvasEngine = (function () {
   }
 
   function drawPanelNumbers(ctx, w, h) {
-    const cellW = w / GRID_COLS;
-    const cellH = h / GRID_ROWS;
-    const fontSize = Math.max(14, Math.min(cellW, cellH) * 0.3);
+    if (!currentModel || !currentModel.panels) return;
+    const panels = currentModel.panels;
+
     ctx.save();
-    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    for (let row = 0; row < GRID_ROWS; row++) {
-      for (let col = 0; col < GRID_COLS; col++) {
-        const idx = row * GRID_COLS + col;
-        const cx = col * cellW + cellW / 2;
-        const cy = row * cellH + cellH / 2;
+    for (let i = 0; i < panels.length; i++) {
+      const p = panels[i];
+      const px = p.x * w;
+      const py = p.y * h;
+      const pw = p.w * w;
+      const ph = p.h * h;
+      const cx = px + pw / 2;
+      const cy = py + ph / 2;
 
-        // Grid lines
-        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(col * cellW, row * cellH, cellW, cellH);
+      const fontSize = Math.max(12, Math.min(pw, ph) * 0.28);
+      ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
 
-        // Number badge
-        const r = fontSize * 0.7;
-        ctx.fillStyle = 'rgba(0,0,0,0.45)';
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
+      // Number badge
+      const r = fontSize * 0.75;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
 
-        ctx.fillStyle = '#fff';
-        ctx.fillText(idx + 1, cx, cy);
-      }
+      ctx.fillStyle = '#fff';
+      ctx.fillText(i + 1, cx, cy);
     }
     ctx.restore();
   }
@@ -556,15 +553,13 @@ const CanvasEngine = (function () {
         userLayerCtx.globalAlpha = layer.opacity;
         userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
 
-        // Per-layer grid clip (restrict to selected grid cells only)
-        if (layer.selectedPanels && layer.selectedPanels.length > 0) {
-          const cellW = w / GRID_COLS;
-          const cellH = h / GRID_ROWS;
+        // Per-layer panel clip (restrict to selected panels only)
+        if (layer.selectedPanels && layer.selectedPanels.length > 0 && currentModel) {
           userLayerCtx.beginPath();
           for (const idx of layer.selectedPanels) {
-            const col = idx % GRID_COLS;
-            const row = Math.floor(idx / GRID_COLS);
-            userLayerCtx.rect(col * cellW, row * cellH, cellW, cellH);
+            const p = currentModel.panels[idx];
+            if (!p) continue;
+            userLayerCtx.rect(p.x * w, p.y * h, p.w * w, p.h * h);
           }
           userLayerCtx.clip();
         }
@@ -738,7 +733,7 @@ const CanvasEngine = (function () {
     clearLayers,
     hasLayers,
     getCurrentModel: () => currentModel,
-    getGridSize: () => ({ cols: GRID_COLS, rows: GRID_ROWS, total: GRID_COLS * GRID_ROWS }),
+    getPanelCount: () => currentModel && currentModel.panels ? currentModel.panels.length : 0,
     setShowPanelNumbers: (v) => { showPanelNumbers = v; render(); },
     // Rendering
     render,

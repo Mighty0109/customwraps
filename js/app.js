@@ -283,26 +283,6 @@ const App = (function () {
     wrap.className = 'controls-wrap';
     wrap.id = 'controls-wrap';
 
-    // Fill mode
-    const fillLabel = document.createElement('div');
-    fillLabel.className = 'control-section-label';
-    fillLabel.textContent = '채우기 모드';
-    wrap.appendChild(fillLabel);
-
-    const fillModeGroup = UI.createRadioGroup({
-      name: 'fillMode',
-      options: [
-        { value: 'tile', label: '타일' },
-        { value: 'stretch', label: '늘리기' },
-        { value: 'fit', label: '맞추기' },
-        { value: 'center', label: '가운데' },
-      ],
-      value: 'tile',
-      onChange: (v) => updateSelectedLayer({ fillMode: v }),
-    });
-    controlRefs.fillMode = fillModeGroup;
-    wrap.appendChild(fillModeGroup.wrapper);
-
     // Blend mode
     const blendLabel = document.createElement('div');
     blendLabel.className = 'control-section-label';
@@ -574,7 +554,7 @@ const App = (function () {
     if (controlRefs.opacity) controlRefs.opacity.updateValue(Math.round(layer.opacity * 100));
     if (controlRefs.offsetX) controlRefs.offsetX.updateValue(Math.round(layer.offsetX));
     if (controlRefs.offsetY) controlRefs.offsetY.updateValue(Math.round(layer.offsetY));
-    if (controlRefs.fillMode) controlRefs.fillMode.setValue(layer.fillMode);
+
     if (controlRefs.blendMode) controlRefs.blendMode.setValue(layer.blendMode || 'source-over');
     if (controlRefs.bgColor) controlRefs.bgColor.update(layer.backgroundColor);
     if (controlRefs.panelSelector) controlRefs.panelSelector.rebuild();

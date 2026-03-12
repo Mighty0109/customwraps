@@ -1,21 +1,21 @@
 /* ============================================================
    app.js - Main App Orchestration, Routing, State
+   (Layer-based architecture)
    ============================================================ */
 
 'use strict';
 
 const App = (function () {
   let currentModel = null;
-  let currentScreen = 'select'; // 'select' | 'editor'
-  let currentTab = 'upload';    // 'upload' | 'controls' | 'settings'
+  let currentScreen = 'select';
+  let currentTab = 'upload';
 
-  const MAX_IMAGES = 5;
+  const MAX_LAYERS = 5;
 
-  // UI element references
   let controlRefs = {};
+  let layerListContainer = null;
   let uploadZoneContainer = null;
-  let imageInfoContainer = null;
-  let uploadedFiles = [];   // Array of { image, name, size, width, height, ..., id }
+  let controlsContainer = null;
 
   function init() {
     renderModelSelection();
@@ -33,26 +33,22 @@ const App = (function () {
     currentScreen = screen;
     document.getElementById('screen-select').classList.toggle('hidden', screen !== 'select');
     document.getElementById('screen-editor').classList.toggle('hidden', screen !== 'editor');
-
     if (screen === 'editor') {
-      // Small delay to let layout settle
       setTimeout(() => CanvasEngine.render(), 50);
     }
   }
 
   // ========================
-  // Model Selection Screen
+  // Model Selection
   // ========================
 
   function renderModelSelection() {
     const grid = document.getElementById('model-grid');
     grid.innerHTML = '';
-
     TeslaModels.forEach(model => {
       const card = document.createElement('button');
       card.className = 'model-card';
       card.setAttribute('aria-label', model.name + (model.subtitle ? ' ' + model.subtitle : ''));
-
       const thumbUrl = getVehicleImagePath(model);
       const fallbackSvg = generateThumbnailSVG(model);
       card.innerHTML = `
@@ -65,7 +61,6 @@ const App = (function () {
           ${model.subtitle ? `<div class="model-card-subtitle">${model.subtitle}</div>` : ''}
         </div>
       `;
-
       card.addEventListener('click', () => selectModel(model));
       grid.appendChild(card);
     });
@@ -75,16 +70,14 @@ const App = (function () {
     currentModel = model;
     document.getElementById('editor-model-name').textContent =
       model.name + (model.subtitle ? ' ' + model.subtitle : '');
-
-    // Init canvas with template
     const canvasEl = document.getElementById('main-canvas');
     CanvasEngine.init(canvasEl);
     CanvasEngine.setTemplate(model);
-
-    // Reset upload state
-    clearAllImages();
+    CanvasEngine.clearLayers();
     showTab('upload');
     showScreen('editor');
+    refreshLayerList();
+    refreshControls();
   }
 
   function getCurrentModel() {
@@ -96,26 +89,22 @@ const App = (function () {
   // ========================
 
   function setupEditorUI() {
-    // Tab bar
     document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        showTab(btn.dataset.tab);
-      });
+      btn.addEventListener('click', () => showTab(btn.dataset.tab));
     });
+    document.getElementById('btn-back').addEventListener('click', () => showScreen('select'));
 
-    // Back button
-    document.getElementById('btn-back').addEventListener('click', () => {
-      showScreen('select');
-    });
+    // Containers
+    layerListContainer = document.getElementById('layer-list-container');
+    uploadZoneContainer = document.getElementById('upload-zone-container');
+    controlsContainer = document.getElementById('controls-container');
 
-    // Setup upload zone
-    setupUploadTab();
+    // Drop zone
+    const zone = UI.createDropZone({ onFile: handleImageUpload, multiple: true });
+    uploadZoneContainer.appendChild(zone);
 
-    // Setup controls tab
-    setupControlsTab();
-
-    // Setup settings tab
-    setupSettingsTab();
+    // Build controls (once)
+    buildControls();
   }
 
   function showTab(tab) {
@@ -129,106 +118,177 @@ const App = (function () {
   }
 
   // ========================
-  // Upload Tab
+  // Layer Upload
   // ========================
 
-  function setupUploadTab() {
-    uploadZoneContainer = document.getElementById('upload-zone-container');
-    imageInfoContainer = document.getElementById('image-info-container');
-
-    const zone = UI.createDropZone({
-      onFile: handleImageUpload,
-      multiple: true,
-    });
-    uploadZoneContainer.appendChild(zone);
-  }
-
   function handleImageUpload(fileInfo) {
-    if (uploadedFiles.length >= MAX_IMAGES) {
-      UI.showToast(`최대 ${MAX_IMAGES}장까지 업로드할 수 있습니다.`);
+    if (CanvasEngine.getLayerCount() >= MAX_LAYERS) {
+      UI.showToast(`최대 ${MAX_LAYERS}개 레이어까지 추가할 수 있습니다.`);
       return;
     }
+    const id = Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    fileInfo.id = id;
+    CanvasEngine.addLayer(fileInfo.image, id, fileInfo.name);
+    CanvasEngine.setSelectedLayer(id);
+    refreshLayerList();
+    refreshControls();
 
-    // Assign unique ID
-    fileInfo.id = Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-    uploadedFiles.push(fileInfo);
-    CanvasEngine.addUserImage(fileInfo.image, fileInfo.id);
-
-    updateUploadUI();
-
-    // Auto-switch to controls tab on mobile (only on first image)
-    if (uploadedFiles.length === 1 && window.innerWidth < 1200) {
+    if (CanvasEngine.getLayerCount() === 1 && window.innerWidth < 1200) {
       setTimeout(() => showTab('controls'), 300);
     }
   }
 
-  function removeImage(id) {
-    uploadedFiles = uploadedFiles.filter(f => f.id !== id);
-    CanvasEngine.removeUserImage(id);
-    updateUploadUI();
+  // ========================
+  // Layer List UI
+  // ========================
+
+  function refreshLayerList() {
+    layerListContainer.innerHTML = '';
+    const layers = CanvasEngine.getLayers();
+    const selectedId = CanvasEngine.getSelectedLayerId();
+
+    // Count header
+    const header = document.createElement('div');
+    header.className = 'layer-list-header';
+    header.textContent = `레이어 ${layers.length} / ${MAX_LAYERS}`;
+    layerListContainer.appendChild(header);
+
+    if (layers.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'layer-list-empty';
+      empty.textContent = '이미지를 업로드하여 레이어를 추가하세요';
+      layerListContainer.appendChild(empty);
+    }
+
+    // Render layers (top = last in array = front)
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i];
+      const item = document.createElement('div');
+      item.className = 'layer-item' + (layer.id === selectedId ? ' selected' : '') +
+        (!layer.visible ? ' layer-hidden' : '');
+
+      // Visibility toggle
+      const visBtn = document.createElement('button');
+      visBtn.className = 'btn-icon layer-vis-btn';
+      visBtn.innerHTML = layer.visible
+        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>`
+        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+      visBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        CanvasEngine.updateLayer(layer.id, { visible: !layer.visible });
+        refreshLayerList();
+      });
+
+      // Thumbnail
+      const thumb = document.createElement('div');
+      thumb.className = 'layer-thumb';
+      if (layer.backgroundColor) {
+        thumb.style.backgroundColor = layer.backgroundColor;
+      }
+      if (layer.image) {
+        const img = document.createElement('img');
+        img.src = layer.image.src;
+        img.alt = layer.name;
+        thumb.appendChild(img);
+      }
+
+      // Name
+      const name = document.createElement('div');
+      name.className = 'layer-name';
+      name.textContent = layer.name;
+
+      // Actions
+      const actions = document.createElement('div');
+      actions.className = 'layer-actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn-icon layer-action-btn';
+      editBtn.title = '배경 지우기';
+      editBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M14.85 2.85a1.5 1.5 0 012.1 2.1L6.5 15.4l-3.5 1 1-3.5L14.85 2.85z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openImageEditor(layer);
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-icon layer-action-btn layer-del-btn';
+      delBtn.title = '레이어 삭제';
+      delBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        CanvasEngine.removeLayer(layer.id);
+        refreshLayerList();
+        refreshControls();
+      });
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      item.appendChild(visBtn);
+      item.appendChild(thumb);
+      item.appendChild(name);
+      item.appendChild(actions);
+
+      // Select on click
+      item.addEventListener('click', () => {
+        CanvasEngine.setSelectedLayer(layer.id);
+        refreshLayerList();
+        refreshControls();
+      });
+
+      layerListContainer.appendChild(item);
+    }
+
+    // Clear all button
+    if (layers.length >= 2) {
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'btn btn-secondary btn-sm layer-clear-all';
+      clearBtn.textContent = '전체 삭제';
+      clearBtn.addEventListener('click', () => {
+        CanvasEngine.clearLayers();
+        refreshLayerList();
+        refreshControls();
+      });
+      layerListContainer.appendChild(clearBtn);
+    }
+
+    // Show/hide drop zone
+    uploadZoneContainer.classList.toggle('is-full', layers.length >= MAX_LAYERS);
+    uploadZoneContainer.classList.toggle('has-image', layers.length > 0);
   }
 
-  function openImageEditor(fileInfo) {
-    ImageEditor.open(fileInfo.image, (newImage) => {
-      fileInfo.image = newImage;
-      fileInfo.width = newImage.naturalWidth || newImage.width;
-      fileInfo.height = newImage.naturalHeight || newImage.height;
-      CanvasEngine.updateUserImage(fileInfo.id, newImage);
-      updateUploadUI();
+  function openImageEditor(layer) {
+    ImageEditor.open(layer.image, (newImage) => {
+      CanvasEngine.updateLayerImage(layer.id, newImage);
+      refreshLayerList();
     });
   }
 
-  function clearAllImages() {
-    uploadedFiles = [];
-    CanvasEngine.clearUserImages();
-    updateUploadUI();
-  }
-
-  function updateUploadUI() {
-    imageInfoContainer.innerHTML = '';
-
-    if (uploadedFiles.length > 0) {
-      // Image count header
-      const countEl = document.createElement('div');
-      countEl.className = 'upload-count';
-      countEl.textContent = `이미지 ${uploadedFiles.length} / ${MAX_IMAGES}`;
-      imageInfoContainer.appendChild(countEl);
-
-      // Image list
-      uploadedFiles.forEach((fileInfo) => {
-        const { card, editBtn, removeBtn } = UI.createImageInfo(fileInfo);
-        editBtn.addEventListener('click', () => openImageEditor(fileInfo));
-        removeBtn.addEventListener('click', () => removeImage(fileInfo.id));
-        imageInfoContainer.appendChild(card);
-      });
-
-      // Clear all button (when 2+ images)
-      if (uploadedFiles.length >= 2) {
-        const clearBtn = document.createElement('button');
-        clearBtn.className = 'btn btn-secondary btn-sm btn-clear-all';
-        clearBtn.textContent = '전체 삭제';
-        clearBtn.addEventListener('click', clearAllImages);
-        imageInfoContainer.appendChild(clearBtn);
-      }
-
-      imageInfoContainer.classList.remove('hidden');
-      uploadZoneContainer.classList.toggle('has-image', true);
-      uploadZoneContainer.classList.toggle('is-full', uploadedFiles.length >= MAX_IMAGES);
-    } else {
-      imageInfoContainer.classList.add('hidden');
-      uploadZoneContainer.classList.remove('has-image', 'is-full');
-    }
-  }
-
   // ========================
-  // Controls Tab
+  // Controls (per-layer)
   // ========================
 
-  function setupControlsTab() {
-    const container = document.getElementById('controls-container');
-    container.innerHTML = '';
+  function buildControls() {
+    controlsContainer.innerHTML = '';
+
+    // Empty state message
+    const emptyMsg = document.createElement('div');
+    emptyMsg.className = 'controls-empty';
+    emptyMsg.id = 'controls-empty';
+    emptyMsg.textContent = '레이어를 선택하세요';
+    controlsContainer.appendChild(emptyMsg);
+
+    // Controls wrapper (hidden when no selection)
+    const wrap = document.createElement('div');
+    wrap.className = 'controls-wrap';
+    wrap.id = 'controls-wrap';
 
     // Fill mode
+    const fillLabel = document.createElement('div');
+    fillLabel.className = 'control-section-label';
+    fillLabel.textContent = '채우기 모드';
+    wrap.appendChild(fillLabel);
+
     const fillModeGroup = UI.createRadioGroup({
       name: 'fillMode',
       options: [
@@ -238,109 +298,301 @@ const App = (function () {
         { value: 'center', label: '가운데' },
       ],
       value: 'tile',
-      onChange: (v) => CanvasEngine.updateState({ fillMode: v }),
+      onChange: (v) => updateSelectedLayer({ fillMode: v }),
     });
     controlRefs.fillMode = fillModeGroup;
+    wrap.appendChild(fillModeGroup.wrapper);
 
-    const fillLabel = document.createElement('div');
-    fillLabel.className = 'control-section-label';
-    fillLabel.textContent = '채우기 모드 (Fill Mode)';
-    container.appendChild(fillLabel);
-    container.appendChild(fillModeGroup.wrapper);
+    // Blend mode
+    const blendLabel = document.createElement('div');
+    blendLabel.className = 'control-section-label';
+    blendLabel.textContent = '블렌드 모드';
+    wrap.appendChild(blendLabel);
+
+    const blendSelect = document.createElement('select');
+    blendSelect.className = 'blend-mode-select';
+    const blendModes = [
+      { value: 'source-over', label: '일반 (Normal)' },
+      { value: 'multiply', label: '곱하기 (Multiply)' },
+      { value: 'screen', label: '스크린 (Screen)' },
+      { value: 'overlay', label: '오버레이 (Overlay)' },
+      { value: 'darken', label: '어둡게 (Darken)' },
+      { value: 'lighten', label: '밝게 (Lighten)' },
+      { value: 'color-dodge', label: '색상 닷지' },
+      { value: 'color-burn', label: '색상 번' },
+      { value: 'hard-light', label: '하드 라이트' },
+      { value: 'soft-light', label: '소프트 라이트' },
+      { value: 'difference', label: '차이 (Difference)' },
+      { value: 'exclusion', label: '제외 (Exclusion)' },
+    ];
+    blendModes.forEach(bm => {
+      const opt = document.createElement('option');
+      opt.value = bm.value;
+      opt.textContent = bm.label;
+      blendSelect.appendChild(opt);
+    });
+    blendSelect.addEventListener('change', () => {
+      updateSelectedLayer({ blendMode: blendSelect.value });
+    });
+    controlRefs.blendMode = {
+      el: blendSelect,
+      setValue: (v) => { blendSelect.value = v; }
+    };
+    wrap.appendChild(blendSelect);
+
+    // Background color
+    const bgLabel = document.createElement('div');
+    bgLabel.className = 'control-section-label';
+    bgLabel.style.marginTop = '16px';
+    bgLabel.textContent = '배경색';
+    wrap.appendChild(bgLabel);
+
+    const bgRow = document.createElement('div');
+    bgRow.className = 'bg-color-row';
+
+    const bgNoneBtn = document.createElement('button');
+    bgNoneBtn.className = 'btn btn-sm bg-color-none active';
+    bgNoneBtn.textContent = '없음';
+
+    const bgColorInput = document.createElement('input');
+    bgColorInput.type = 'color';
+    bgColorInput.className = 'bg-color-input';
+    bgColorInput.value = '#ffffff';
+
+    bgNoneBtn.addEventListener('click', () => {
+      bgNoneBtn.classList.add('active');
+      updateSelectedLayer({ backgroundColor: null });
+    });
+
+    bgColorInput.addEventListener('input', () => {
+      bgNoneBtn.classList.remove('active');
+      updateSelectedLayer({ backgroundColor: bgColorInput.value });
+    });
+
+    controlRefs.bgColor = {
+      update: (val) => {
+        if (val) {
+          bgNoneBtn.classList.remove('active');
+          bgColorInput.value = val;
+        } else {
+          bgNoneBtn.classList.add('active');
+        }
+      }
+    };
+
+    bgRow.appendChild(bgNoneBtn);
+    bgRow.appendChild(bgColorInput);
+    wrap.appendChild(bgRow);
+
+    // Panel selection
+    const panelLabel = document.createElement('div');
+    panelLabel.className = 'control-section-label';
+    panelLabel.textContent = '표시 영역 (패널 선택)';
+    wrap.appendChild(panelLabel);
+
+    const panelWrap = document.createElement('div');
+    panelWrap.className = 'panel-selector';
+    panelWrap.id = 'panel-selector';
+    wrap.appendChild(panelWrap);
+
+    controlRefs.panelSelector = {
+      container: panelWrap,
+      rebuild: () => buildPanelSelector(panelWrap),
+    };
+
+    buildPanelSelector(panelWrap);
 
     // Scale
     const scaleSlider = UI.createSlider({
-      id: 'ctrl-scale',
-      label: '크기 (Scale)',
-      min: 10, max: 500, step: 1, value: 100,
-      unit: '%',
-      onChange: (v) => CanvasEngine.updateState({ scale: v / 100 }),
+      id: 'ctrl-scale', label: '크기 (Scale)',
+      min: 10, max: 500, step: 1, value: 100, unit: '%',
+      onChange: (v) => updateSelectedLayer({ scale: v / 100 }),
     });
     controlRefs.scale = scaleSlider;
-    container.appendChild(scaleSlider.wrapper);
+    wrap.appendChild(scaleSlider.wrapper);
 
     // Rotation
     const rotSlider = UI.createSlider({
-      id: 'ctrl-rotation',
-      label: '회전 (Rotation)',
-      min: 0, max: 360, step: 1, value: 0,
-      unit: '\u00B0',
-      onChange: (v) => CanvasEngine.updateState({ rotation: v }),
+      id: 'ctrl-rotation', label: '회전 (Rotation)',
+      min: 0, max: 360, step: 1, value: 0, unit: '\u00B0',
+      onChange: (v) => updateSelectedLayer({ rotation: v }),
     });
     controlRefs.rotation = rotSlider;
-    container.appendChild(rotSlider.wrapper);
+    wrap.appendChild(rotSlider.wrapper);
 
     // Opacity
     const opacSlider = UI.createSlider({
-      id: 'ctrl-opacity',
-      label: '투명도 (Opacity)',
-      min: 0, max: 100, step: 1, value: 100,
-      unit: '%',
-      onChange: (v) => CanvasEngine.updateState({ opacity: v / 100 }),
+      id: 'ctrl-opacity', label: '투명도 (Opacity)',
+      min: 0, max: 100, step: 1, value: 100, unit: '%',
+      onChange: (v) => updateSelectedLayer({ opacity: v / 100 }),
     });
     controlRefs.opacity = opacSlider;
-    container.appendChild(opacSlider.wrapper);
+    wrap.appendChild(opacSlider.wrapper);
 
     // Offset X
     const offXSlider = UI.createSlider({
-      id: 'ctrl-offset-x',
-      label: 'X 오프셋',
-      min: -512, max: 512, step: 1, value: 0,
-      unit: 'px',
-      onChange: (v) => CanvasEngine.updateState({ offsetX: v }),
+      id: 'ctrl-offset-x', label: 'X 오프셋',
+      min: -512, max: 512, step: 1, value: 0, unit: 'px',
+      onChange: (v) => updateSelectedLayer({ offsetX: v }),
     });
     controlRefs.offsetX = offXSlider;
-    container.appendChild(offXSlider.wrapper);
+    wrap.appendChild(offXSlider.wrapper);
 
     // Offset Y
     const offYSlider = UI.createSlider({
-      id: 'ctrl-offset-y',
-      label: 'Y 오프셋',
-      min: -512, max: 512, step: 1, value: 0,
-      unit: 'px',
-      onChange: (v) => CanvasEngine.updateState({ offsetY: v }),
+      id: 'ctrl-offset-y', label: 'Y 오프셋',
+      min: -512, max: 512, step: 1, value: 0, unit: 'px',
+      onChange: (v) => updateSelectedLayer({ offsetY: v }),
     });
     controlRefs.offsetY = offYSlider;
-    container.appendChild(offYSlider.wrapper);
+    wrap.appendChild(offYSlider.wrapper);
 
-    // Reset button
+    // Reset
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn btn-secondary btn-reset';
-    resetBtn.textContent = '초기화 (Reset All)';
+    resetBtn.textContent = '레이어 초기화';
     resetBtn.addEventListener('click', () => {
-      CanvasEngine.resetState();
+      const layer = CanvasEngine.getSelectedLayer();
+      if (layer) {
+        CanvasEngine.resetLayer(layer.id);
+        refreshControls();
+        refreshLayerList();
+      }
     });
-    container.appendChild(resetBtn);
+    wrap.appendChild(resetBtn);
+
+    controlsContainer.appendChild(wrap);
   }
 
-  /**
-   * Sync control UI from engine state (called after gesture/auto-place).
-   */
-  function syncControlsFromEngine(st) {
-    if (controlRefs.scale) controlRefs.scale.updateValue(Math.round(st.scale * 100));
-    if (controlRefs.rotation) controlRefs.rotation.updateValue(Math.round(st.rotation));
-    if (controlRefs.opacity) controlRefs.opacity.updateValue(Math.round(st.opacity * 100));
-    if (controlRefs.offsetX) controlRefs.offsetX.updateValue(Math.round(st.offsetX));
-    if (controlRefs.offsetY) controlRefs.offsetY.updateValue(Math.round(st.offsetY));
-    if (controlRefs.fillMode) controlRefs.fillMode.setValue(st.fillMode);
+  function updateSelectedLayer(props) {
+    const layer = CanvasEngine.getSelectedLayer();
+    if (!layer) return;
+    CanvasEngine.updateLayer(layer.id, props);
+    refreshLayerList();
+  }
+
+  function refreshControls() {
+    const layer = CanvasEngine.getSelectedLayer();
+    const emptyEl = document.getElementById('controls-empty');
+    const wrapEl = document.getElementById('controls-wrap');
+    if (!emptyEl || !wrapEl) return;
+
+    if (!layer) {
+      emptyEl.classList.remove('hidden');
+      wrapEl.classList.add('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    wrapEl.classList.remove('hidden');
+    syncControlsFromEngine(layer);
+  }
+
+  function buildPanelSelector(container) {
+    container.innerHTML = '';
+    if (!currentModel || !currentModel.panels) return;
+
+    const panels = currentModel.panels;
+    const layer = CanvasEngine.getSelectedLayer();
+    const selected = layer ? layer.selectedPanels : null;
+    const allSelected = !selected; // null means all
+
+    // "전체" (All) toggle
+    const allLabel = document.createElement('label');
+    allLabel.className = 'panel-check' + (allSelected ? ' checked' : '');
+    const allCb = document.createElement('input');
+    allCb.type = 'checkbox';
+    allCb.checked = allSelected;
+    const allSpan = document.createElement('span');
+    allSpan.textContent = '전체 (All)';
+    allLabel.appendChild(allCb);
+    allLabel.appendChild(allSpan);
+    container.appendChild(allLabel);
+
+    // Individual panel checkboxes
+    const checkboxes = [];
+    panels.forEach((p, idx) => {
+      const label = document.createElement('label');
+      label.className = 'panel-check' + (allSelected || (selected && selected.includes(idx)) ? ' checked' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = allSelected || (selected && selected.includes(idx));
+      cb.disabled = allSelected;
+      cb.dataset.idx = idx;
+      const span = document.createElement('span');
+      span.textContent = p.label;
+      label.appendChild(cb);
+      label.appendChild(span);
+      container.appendChild(label);
+      checkboxes.push({ cb, label });
+    });
+
+    // "All" checkbox handler
+    allCb.addEventListener('change', () => {
+      if (allCb.checked) {
+        allLabel.classList.add('checked');
+        checkboxes.forEach(({ cb, label }) => {
+          cb.checked = true;
+          cb.disabled = true;
+          label.classList.add('checked');
+        });
+        updateSelectedLayer({ selectedPanels: null });
+      } else {
+        allLabel.classList.remove('checked');
+        checkboxes.forEach(({ cb }) => { cb.disabled = false; });
+      }
+    });
+
+    // Individual checkbox handler
+    checkboxes.forEach(({ cb, label }) => {
+      cb.addEventListener('change', () => {
+        label.classList.toggle('checked', cb.checked);
+        const indices = [];
+        checkboxes.forEach(({ cb: c }, i) => {
+          if (c.checked) indices.push(parseInt(c.dataset.idx));
+        });
+        if (indices.length === 0 || indices.length === panels.length) {
+          allCb.checked = true;
+          allLabel.classList.add('checked');
+          checkboxes.forEach(({ cb: c, label: l }) => {
+            c.checked = true;
+            c.disabled = true;
+            l.classList.add('checked');
+          });
+          updateSelectedLayer({ selectedPanels: null });
+        } else {
+          updateSelectedLayer({ selectedPanels: indices });
+        }
+      });
+    });
+  }
+
+  function syncControlsFromEngine(layer) {
+    if (!layer) return;
+    if (controlRefs.scale) controlRefs.scale.updateValue(Math.round(layer.scale * 100));
+    if (controlRefs.rotation) controlRefs.rotation.updateValue(Math.round(layer.rotation));
+    if (controlRefs.opacity) controlRefs.opacity.updateValue(Math.round(layer.opacity * 100));
+    if (controlRefs.offsetX) controlRefs.offsetX.updateValue(Math.round(layer.offsetX));
+    if (controlRefs.offsetY) controlRefs.offsetY.updateValue(Math.round(layer.offsetY));
+    if (controlRefs.fillMode) controlRefs.fillMode.setValue(layer.fillMode);
+    if (controlRefs.blendMode) controlRefs.blendMode.setValue(layer.blendMode || 'source-over');
+    if (controlRefs.bgColor) controlRefs.bgColor.update(layer.backgroundColor);
+    if (controlRefs.panelSelector) controlRefs.panelSelector.rebuild();
   }
 
   // ========================
   // Settings Tab
   // ========================
 
-  function setupSettingsTab() {
-    // Settings tab content is in HTML, nothing dynamic needed for now
-  }
+  // (HTML content, no JS needed)
 
   // ========================
-  // Before/After Toggle
+  // Before/After
   // ========================
 
   function setupBeforeAfter() {
     const btn = document.getElementById('btn-before-after');
     if (!btn) return;
-
     const canvas = document.getElementById('main-canvas');
 
     btn.addEventListener('mousedown', showTemplate);
@@ -351,7 +603,7 @@ const App = (function () {
     btn.addEventListener('touchcancel', restoreImage);
 
     function showTemplate() {
-      if (!CanvasEngine.hasUserImage()) return;
+      if (!CanvasEngine.hasLayers()) return;
       btn.classList.add('active');
       const ctx = canvas.getContext('2d');
       const cssW = parseInt(canvas.style.width) || canvas.width;
@@ -382,24 +634,22 @@ const App = (function () {
   }
 
   function openExportSheet() {
-    if (!CanvasEngine.hasUserImage()) {
+    if (!CanvasEngine.hasLayers()) {
       UI.showToast('먼저 이미지를 업로드해 주세요.');
       return;
     }
 
     const content = document.createElement('div');
     content.className = 'export-content';
-
-    // Preview
     const previewSize = 256;
     const previewUrl = CanvasEngine.getPreviewDataURL(previewSize);
     content.innerHTML = `
-      <h3 class="export-title">내보내기 (Export)</h3>
+      <h3 class="export-title">내보내기</h3>
       <div class="export-preview">
         <img src="${previewUrl}" alt="미리보기" width="${previewSize}" height="${previewSize}">
       </div>
       <div class="export-field">
-        <label for="export-resolution">해상도 (Resolution)</label>
+        <label for="export-resolution">해상도</label>
         <div class="export-resolution-btns">
           <button class="btn btn-sm res-btn" data-res="512">512px</button>
           <button class="btn btn-sm res-btn active" data-res="768">768px</button>
@@ -413,14 +663,13 @@ const App = (function () {
                  pattern="[a-zA-Z0-9_-]+" placeholder="영문, 숫자, _, -">
           <span class="export-filename-ext">.png</span>
         </div>
-        <div class="export-filename-hint">영문, 숫자, 밑줄(_), 하이픈(-) / 최대 30자</div>
       </div>
       <button class="btn btn-primary btn-download" id="btn-download">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M3 15V16C3 16.55 3.45 17 4 17H16C16.55 17 17 16.55 17 16V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        다운로드 (Download)
+        다운로드
       </button>
       <div class="export-size-warning hidden" id="export-size-warning"></div>
       <div class="export-usb-info">
@@ -436,7 +685,6 @@ const App = (function () {
 
     const sheet = UI.createBottomSheet(content);
 
-    // Resolution buttons
     let selectedRes = 768;
     content.querySelectorAll('.res-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -446,34 +694,26 @@ const App = (function () {
       });
     });
 
-    // Filename validation
     const filenameInput = content.querySelector('#export-filename');
     filenameInput.addEventListener('input', () => {
       filenameInput.value = filenameInput.value.replace(/[^a-zA-Z0-9_-]/g, '');
     });
 
-    // Download
     content.querySelector('#btn-download').addEventListener('click', async () => {
       const filename = filenameInput.value.trim() || 'my_wrap';
       const downloadBtn = content.querySelector('#btn-download');
       const warningEl = content.querySelector('#export-size-warning');
-
       downloadBtn.disabled = true;
       downloadBtn.textContent = '생성 중...';
 
       try {
-        let blob = await CanvasEngine.exportPNG(selectedRes, filename);
-
-        // Check size
+        let blob = await CanvasEngine.exportPNG(selectedRes);
         if (blob.size > 1048576) {
-          // Try lower resolution
           const lowerRes = selectedRes === 1024 ? 768 : 512;
-          warningEl.textContent = `파일 크기가 ${UI.formatFileSize(blob.size)}입니다. ${lowerRes}px로 자동 축소합니다.`;
+          warningEl.textContent = `파일 크기가 ${UI.formatFileSize(blob.size)}입니다. ${lowerRes}px로 축소합니다.`;
           warningEl.classList.remove('hidden');
-          blob = await CanvasEngine.exportPNG(lowerRes, filename);
+          blob = await CanvasEngine.exportPNG(lowerRes);
         }
-
-        // Download
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -482,7 +722,6 @@ const App = (function () {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-
         UI.showToast('다운로드가 시작되었습니다!');
         setTimeout(() => UI.closeBottomSheet(sheet), 500);
       } catch (err) {
@@ -495,7 +734,7 @@ const App = (function () {
             <path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M3 15V16C3 16.55 3.45 17 4 17H16C16.55 17 17 16.55 17 16V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          다운로드 (Download)`;
+          다운로드`;
       }
     });
   }
@@ -507,7 +746,6 @@ const App = (function () {
   };
 })();
 
-// Boot
 document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });

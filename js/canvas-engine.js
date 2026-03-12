@@ -1,5 +1,6 @@
 /* ============================================================
    canvas-engine.js - Canvas Compositing & Export Engine
+   (Layer-based architecture)
    ============================================================ */
 
 'use strict';
@@ -11,23 +12,16 @@ const CanvasEngine = (function () {
   let offCtx = null;
 
   let templateImage = null;
-  let userImages = [];       // Array of { image, id }
-  let maskCanvas = null;     // Mask derived from template (white panels → opaque)
-  let userLayerCanvas = null; // Temp canvas for compositing user images + mask
+  let maskCanvas = null;
+  let userLayerCanvas = null;
   let userLayerCtx = null;
   let internalSize = 1024;
   let internalWidth = 1024;
   let internalHeight = 1024;
 
-  // Transform state
-  let state = {
-    scale: 1.0,
-    rotation: 0,
-    opacity: 1.0,
-    fillMode: 'tile',  // tile | stretch | fit | center
-    offsetX: 0,
-    offsetY: 0,
-  };
+  // Layer system
+  let layers = [];
+  let selectedLayerId = null;
 
   // Touch gesture state
   let gestureState = {
@@ -43,8 +37,11 @@ const CanvasEngine = (function () {
     lastTouchCount: 0,
   };
 
-  // Checkerboard pattern cache
   let checkerPattern = null;
+
+  // ========================
+  // Init
+  // ========================
 
   function init(canvasEl) {
     displayCanvas = canvasEl;
@@ -61,10 +58,9 @@ const CanvasEngine = (function () {
     userLayerCtx = userLayerCanvas.getContext('2d');
 
     createCheckerboard();
-    setupTouchEvents();
+    setupInputEvents();
     render();
 
-    // Re-render on resize
     let resizeTimer;
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
@@ -86,7 +82,178 @@ const CanvasEngine = (function () {
     checkerPattern = displayCtx.createPattern(c, 'repeat');
   }
 
-  function setupTouchEvents() {
+  // ========================
+  // Layer Management
+  // ========================
+
+  function createLayerDefaults() {
+    return {
+      visible: true,
+      opacity: 1.0,
+      blendMode: 'source-over',
+      backgroundColor: null,
+      selectedPanels: null,  // null = all panels, or array of panel indices
+      scale: 1.0,
+      rotation: 0,
+      fillMode: 'tile',
+      offsetX: 0,
+      offsetY: 0,
+    };
+  }
+
+  function addLayer(img, id, name) {
+    const layer = {
+      id: id,
+      image: img,
+      name: name || 'Layer',
+      ...createLayerDefaults(),
+    };
+    autoPlaceLayer(layer);
+    layers.push(layer);
+    if (!selectedLayerId) selectedLayerId = id;
+    render();
+    return layer;
+  }
+
+  function removeLayer(id) {
+    layers = layers.filter(l => l.id !== id);
+    if (selectedLayerId === id) {
+      selectedLayerId = layers.length > 0 ? layers[layers.length - 1].id : null;
+    }
+    render();
+  }
+
+  function updateLayer(id, props) {
+    const layer = layers.find(l => l.id === id);
+    if (!layer) return;
+    Object.assign(layer, props);
+    clampLayerOffsets(layer);
+    render();
+  }
+
+  function updateLayerImage(id, newImage) {
+    const layer = layers.find(l => l.id === id);
+    if (layer) {
+      layer.image = newImage;
+      render();
+    }
+  }
+
+  function getLayer(id) {
+    return layers.find(l => l.id === id) || null;
+  }
+
+  function getLayers() {
+    return layers;
+  }
+
+  function getLayerCount() {
+    return layers.length;
+  }
+
+  function setSelectedLayer(id) {
+    selectedLayerId = id;
+  }
+
+  function getSelectedLayer() {
+    if (!selectedLayerId) return null;
+    return layers.find(l => l.id === selectedLayerId) || null;
+  }
+
+  function getSelectedLayerId() {
+    return selectedLayerId;
+  }
+
+  function moveLayer(id, direction) {
+    const idx = layers.findIndex(l => l.id === id);
+    if (idx < 0) return;
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= layers.length) return;
+    const tmp = layers[idx];
+    layers[idx] = layers[targetIdx];
+    layers[targetIdx] = tmp;
+    render();
+  }
+
+  function resetLayer(id) {
+    const layer = layers.find(l => l.id === id);
+    if (!layer) return;
+    Object.assign(layer, createLayerDefaults());
+    if (layer.image) autoPlaceLayer(layer);
+    render();
+    syncUIFromState();
+  }
+
+  function clearLayers() {
+    layers = [];
+    selectedLayerId = null;
+    render();
+  }
+
+  function hasLayers() {
+    return layers.length > 0;
+  }
+
+  // ========================
+  // Auto-placement
+  // ========================
+
+  function autoPlaceLayer(layer) {
+    const img = layer.image;
+    if (!img) return;
+    const imgW = img.naturalWidth || img.width;
+    const imgH = img.naturalHeight || img.height;
+    const ratio = imgW / imgH;
+
+    if (ratio > 3 || ratio < 0.33) {
+      layer.fillMode = 'tile';
+      layer.scale = Math.min(2, internalSize / Math.max(imgW, imgH));
+    } else if (imgW < internalSize * 0.3 && imgH < internalSize * 0.3) {
+      layer.fillMode = 'tile';
+      layer.scale = 1.0;
+    } else {
+      layer.fillMode = 'fit';
+      layer.scale = 1.0;
+    }
+
+    layer.rotation = 0;
+    layer.opacity = 1.0;
+    layer.offsetX = 0;
+    layer.offsetY = 0;
+
+    // Brightness analysis
+    const sampleCanvas = document.createElement('canvas');
+    const sampleSize = 64;
+    sampleCanvas.width = sampleSize;
+    sampleCanvas.height = sampleSize;
+    const sCtx = sampleCanvas.getContext('2d');
+    sCtx.drawImage(img, 0, 0, sampleSize, sampleSize);
+    const data = sCtx.getImageData(0, 0, sampleSize, sampleSize).data;
+    let totalBright = 0;
+    const pixels = sampleSize * sampleSize;
+    for (let i = 0; i < data.length; i += 4) {
+      totalBright += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+    }
+    const avgBright = totalBright / pixels;
+    if (avgBright < 50) {
+      layer.opacity = 1.0;
+    } else if (avgBright > 200) {
+      layer.opacity = 0.85;
+    } else {
+      layer.opacity = 0.95;
+    }
+  }
+
+  function clampLayerOffsets(layer) {
+    layer.offsetX = Math.max(-internalSize, Math.min(internalSize, layer.offsetX));
+    layer.offsetY = Math.max(-internalSize, Math.min(internalSize, layer.offsetY));
+  }
+
+  // ========================
+  // Input Events (Mouse + Touch)
+  // ========================
+
+  function setupInputEvents() {
     if (!displayCanvas) return;
 
     displayCanvas.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -94,34 +261,32 @@ const CanvasEngine = (function () {
     displayCanvas.addEventListener('touchend', onTouchEnd, { passive: false });
     displayCanvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
-    // Mouse drag support
     let mouseDown = false;
     let mouseStartX = 0, mouseStartY = 0;
     let mouseStartOffX = 0, mouseStartOffY = 0;
 
     displayCanvas.addEventListener('mousedown', (e) => {
-      if (userImages.length === 0) return;
+      const layer = getSelectedLayer();
+      if (!layer) return;
       mouseDown = true;
       const rect = displayCanvas.getBoundingClientRect();
-      const ratioX = internalWidth / rect.width;
-      const ratioY = internalHeight / rect.height;
-      mouseStartX = e.clientX * ratioX;
-      mouseStartY = e.clientY * ratioY;
-      mouseStartOffX = state.offsetX;
-      mouseStartOffY = state.offsetY;
+      mouseStartX = (e.clientX - rect.left) * (internalWidth / rect.width);
+      mouseStartY = (e.clientY - rect.top) * (internalHeight / rect.height);
+      mouseStartOffX = layer.offsetX;
+      mouseStartOffY = layer.offsetY;
       displayCanvas.style.cursor = 'grabbing';
     });
 
     window.addEventListener('mousemove', (e) => {
       if (!mouseDown) return;
+      const layer = getSelectedLayer();
+      if (!layer) return;
       const rect = displayCanvas.getBoundingClientRect();
-      const ratioX = internalWidth / rect.width;
-      const ratioY = internalHeight / rect.height;
-      const dx = e.clientX * ratioX - mouseStartX;
-      const dy = e.clientY * ratioY - mouseStartY;
-      state.offsetX = Math.round(mouseStartOffX + dx);
-      state.offsetY = Math.round(mouseStartOffY + dy);
-      clampOffsets();
+      const dx = (e.clientX - rect.left) * (internalWidth / rect.width) - mouseStartX;
+      const dy = (e.clientY - rect.top) * (internalHeight / rect.height) - mouseStartY;
+      layer.offsetX = Math.round(mouseStartOffX + dx);
+      layer.offsetY = Math.round(mouseStartOffY + dy);
+      clampLayerOffsets(layer);
       render();
       syncUIFromState();
     });
@@ -133,12 +298,12 @@ const CanvasEngine = (function () {
       }
     });
 
-    // Mouse wheel zoom
     displayCanvas.addEventListener('wheel', (e) => {
-      if (userImages.length === 0) return;
+      const layer = getSelectedLayer();
+      if (!layer) return;
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      state.scale = Math.min(5, Math.max(0.1, state.scale + delta));
+      layer.scale = Math.min(5, Math.max(0.1, layer.scale + delta));
       render();
       syncUIFromState();
     }, { passive: false });
@@ -155,55 +320,50 @@ const CanvasEngine = (function () {
   }
 
   function onTouchStart(e) {
-    if (userImages.length === 0) return;
+    const layer = getSelectedLayer();
+    if (!layer) return;
     e.preventDefault();
 
     const touches = e.touches;
     if (touches.length === 1) {
       const rect = displayCanvas.getBoundingClientRect();
-      const ratioX = internalWidth / rect.width;
-      const ratioY = internalHeight / rect.height;
-      gestureState.panStartX = touches[0].clientX * ratioX;
-      gestureState.panStartY = touches[0].clientY * ratioY;
-      gestureState.startOffsetX = state.offsetX;
-      gestureState.startOffsetY = state.offsetY;
+      gestureState.panStartX = (touches[0].clientX - rect.left) * (internalWidth / rect.width);
+      gestureState.panStartY = (touches[0].clientY - rect.top) * (internalHeight / rect.height);
+      gestureState.startOffsetX = layer.offsetX;
+      gestureState.startOffsetY = layer.offsetY;
       gestureState.lastTouchCount = 1;
     } else if (touches.length === 2) {
       gestureState.active = true;
       gestureState.startDist = getTouchDist(touches[0], touches[1]);
       gestureState.startAngle = getTouchAngle(touches[0], touches[1]);
-      gestureState.startScale = state.scale;
-      gestureState.startRotation = state.rotation;
+      gestureState.startScale = layer.scale;
+      gestureState.startRotation = layer.rotation;
       gestureState.lastTouchCount = 2;
     }
   }
 
   function onTouchMove(e) {
-    if (userImages.length === 0) return;
+    const layer = getSelectedLayer();
+    if (!layer) return;
     e.preventDefault();
 
     const touches = e.touches;
     if (touches.length === 1 && gestureState.lastTouchCount === 1) {
-      // Pan
       const rect = displayCanvas.getBoundingClientRect();
-      const ratioX = internalWidth / rect.width;
-      const ratioY = internalHeight / rect.height;
-      const dx = touches[0].clientX * ratioX - gestureState.panStartX;
-      const dy = touches[0].clientY * ratioY - gestureState.panStartY;
-      state.offsetX = Math.round(gestureState.startOffsetX + dx);
-      state.offsetY = Math.round(gestureState.startOffsetY + dy);
-      clampOffsets();
+      const dx = (touches[0].clientX - rect.left) * (internalWidth / rect.width) - gestureState.panStartX;
+      const dy = (touches[0].clientY - rect.top) * (internalHeight / rect.height) - gestureState.panStartY;
+      layer.offsetX = Math.round(gestureState.startOffsetX + dx);
+      layer.offsetY = Math.round(gestureState.startOffsetY + dy);
+      clampLayerOffsets(layer);
       render();
       syncUIFromState();
     } else if (touches.length === 2 && gestureState.active) {
-      // Pinch zoom + rotation
       const dist = getTouchDist(touches[0], touches[1]);
       const angle = getTouchAngle(touches[0], touches[1]);
-      const scaleRatio = dist / gestureState.startDist;
-      state.scale = Math.min(5, Math.max(0.1, gestureState.startScale * scaleRatio));
+      layer.scale = Math.min(5, Math.max(0.1, gestureState.startScale * (dist / gestureState.startDist)));
       const angleDelta = angle - gestureState.startAngle;
-      state.rotation = (gestureState.startRotation + angleDelta) % 360;
-      if (state.rotation < 0) state.rotation += 360;
+      layer.rotation = (gestureState.startRotation + angleDelta) % 360;
+      if (layer.rotation < 0) layer.rotation += 360;
       render();
       syncUIFromState();
     }
@@ -214,90 +374,74 @@ const CanvasEngine = (function () {
       gestureState.active = false;
       gestureState.lastTouchCount = 0;
     } else if (e.touches.length === 1) {
-      // Transition from pinch to pan
+      const layer = getSelectedLayer();
+      if (!layer) return;
       const rect = displayCanvas.getBoundingClientRect();
-      const ratioX = internalWidth / rect.width;
-      const ratioY = internalHeight / rect.height;
-      gestureState.panStartX = e.touches[0].clientX * ratioX;
-      gestureState.panStartY = e.touches[0].clientY * ratioY;
-      gestureState.startOffsetX = state.offsetX;
-      gestureState.startOffsetY = state.offsetY;
+      gestureState.panStartX = (e.touches[0].clientX - rect.left) * (internalWidth / rect.width);
+      gestureState.panStartY = (e.touches[0].clientY - rect.top) * (internalHeight / rect.height);
+      gestureState.startOffsetX = layer.offsetX;
+      gestureState.startOffsetY = layer.offsetY;
       gestureState.active = false;
       gestureState.lastTouchCount = 1;
     }
   }
 
-  function clampOffsets() {
-    state.offsetX = Math.max(-internalSize, Math.min(internalSize, state.offsetX));
-    state.offsetY = Math.max(-internalSize, Math.min(internalSize, state.offsetY));
-  }
-
   function syncUIFromState() {
-    if (typeof App !== 'undefined' && App.syncControlsFromEngine) {
-      App.syncControlsFromEngine(state);
+    const layer = getSelectedLayer();
+    if (layer && typeof App !== 'undefined' && App.syncControlsFromEngine) {
+      App.syncControlsFromEngine(layer);
     }
   }
 
-  let currentModelRef = null;
+  // ========================
+  // Template & Mask
+  // ========================
+
+  let currentModel = null;
 
   function setTemplate(model) {
-    currentModelRef = model;
-    // Load real template PNG
+    currentModel = model;
     const src = getTemplatePath(model);
     loadImage(src).then(img => {
       templateImage = img;
-      // Update internal dimensions to match actual template size
       internalWidth = img.naturalWidth || img.width;
       internalHeight = img.naturalHeight || img.height;
       internalSize = Math.max(internalWidth, internalHeight);
-      offscreen.width = internalWidth;
-      offscreen.height = internalHeight;
-      offCtx = offscreen.getContext('2d');
-      userLayerCanvas.width = internalWidth;
-      userLayerCanvas.height = internalHeight;
-      userLayerCtx = userLayerCanvas.getContext('2d');
+      resizeInternalCanvases();
       generateMask();
       render();
     }).catch(() => {
-      // Fallback to placeholder
       console.warn('Real template not found, using placeholder');
       internalWidth = 1024;
       internalHeight = 1024;
       internalSize = 1024;
-      offscreen.width = internalWidth;
-      offscreen.height = internalHeight;
-      offCtx = offscreen.getContext('2d');
-      userLayerCanvas.width = internalWidth;
-      userLayerCanvas.height = internalHeight;
-      userLayerCtx = userLayerCanvas.getContext('2d');
+      resizeInternalCanvases();
       templateImage = generatePlaceholderTemplate(model, internalSize);
       generateMask();
       render();
     });
   }
 
-  /**
-   * Generate a mask from the template image.
-   * White/bright areas (car panels) → opaque mask.
-   * Dark areas (borders/outlines) → transparent mask.
-   */
+  function resizeInternalCanvases() {
+    offscreen.width = internalWidth;
+    offscreen.height = internalHeight;
+    offCtx = offscreen.getContext('2d');
+    userLayerCanvas.width = internalWidth;
+    userLayerCanvas.height = internalHeight;
+    userLayerCtx = userLayerCanvas.getContext('2d');
+  }
+
   function generateMask() {
     if (!templateImage) return;
-
     maskCanvas = document.createElement('canvas');
     maskCanvas.width = internalWidth;
     maskCanvas.height = internalHeight;
     const mCtx = maskCanvas.getContext('2d');
-
-    // Draw template onto mask canvas
     mCtx.drawImage(templateImage, 0, 0, internalWidth, internalHeight);
-
-    // Convert brightness to alpha
     const imageData = mCtx.getImageData(0, 0, internalWidth, internalHeight);
     const d = imageData.data;
     for (let i = 0; i < d.length; i += 4) {
       const brightness = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-      // Map brightness → alpha (white panels = opaque, dark outlines = transparent)
       d[i] = 255;
       d[i + 1] = 255;
       d[i + 2] = 255;
@@ -306,114 +450,13 @@ const CanvasEngine = (function () {
     mCtx.putImageData(imageData, 0, 0);
   }
 
-  function addUserImage(img, id) {
-    userImages.push({ image: img, id: id });
-    if (userImages.length === 1) {
-      autoPlace(img);
-    }
-    render();
-  }
-
-  function removeUserImage(id) {
-    userImages = userImages.filter(item => item.id !== id);
-    if (userImages.length === 0) {
-      resetState();
-    }
-    render();
-  }
-
-  function updateUserImage(id, newImage) {
-    const item = userImages.find(item => item.id === id);
-    if (item) {
-      item.image = newImage;
-      render();
-    }
-  }
-
-  /**
-   * Auto-placement: analyze image and set initial transform.
-   */
-  function autoPlace(img) {
-    const imgW = img.naturalWidth || img.width;
-    const imgH = img.naturalHeight || img.height;
-    const ratio = imgW / imgH;
-
-    if (ratio > 3 || ratio < 0.33) {
-      // Very wide or tall -> tile mode
-      state.fillMode = 'tile';
-      state.scale = Math.min(2, internalSize / Math.max(imgW, imgH));
-    } else if (imgW < internalSize * 0.3 && imgH < internalSize * 0.3) {
-      // Small image -> tile
-      state.fillMode = 'tile';
-      state.scale = 1.0;
-    } else {
-      // Normal image -> fit to canvas
-      state.fillMode = 'fit';
-      state.scale = 1.0;
-    }
-
-    state.rotation = 0;
-    state.opacity = 1.0;
-    state.offsetX = 0;
-    state.offsetY = 0;
-
-    // Analyze average brightness to adjust opacity
-    const sampleCanvas = document.createElement('canvas');
-    const sampleSize = 64;
-    sampleCanvas.width = sampleSize;
-    sampleCanvas.height = sampleSize;
-    const sCtx = sampleCanvas.getContext('2d');
-    sCtx.drawImage(img, 0, 0, sampleSize, sampleSize);
-    const data = sCtx.getImageData(0, 0, sampleSize, sampleSize).data;
-    let totalBright = 0;
-    const pixels = sampleSize * sampleSize;
-    for (let i = 0; i < data.length; i += 4) {
-      totalBright += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-    }
-    const avgBright = totalBright / pixels;
-
-    // Very dark images might need slightly higher opacity
-    if (avgBright < 50) {
-      state.opacity = 1.0;
-    } else if (avgBright > 200) {
-      state.opacity = 0.85;
-    } else {
-      state.opacity = 0.95;
-    }
-
-    syncUIFromState();
-  }
-
-  function updateState(newState) {
-    Object.assign(state, newState);
-    clampOffsets();
-    render();
-  }
-
-  function getState() {
-    return { ...state };
-  }
-
-  function resetState() {
-    state = {
-      scale: 1.0,
-      rotation: 0,
-      opacity: 1.0,
-      fillMode: 'tile',
-      offsetX: 0,
-      offsetY: 0,
-    };
-    if (userImages.length > 0) {
-      autoPlace(userImages[0].image);
-    }
-    render();
-    syncUIFromState();
-  }
+  // ========================
+  // Rendering
+  // ========================
 
   function render() {
     if (!displayCanvas || !displayCtx) return;
 
-    // Resize display canvas to match container, preserving template aspect ratio
     const container = displayCanvas.parentElement;
     if (container) {
       const containerW = container.clientWidth;
@@ -423,24 +466,14 @@ const CanvasEngine = (function () {
 
       let cssW, cssH;
       if (aspectRatio >= 1) {
-        // Wider than tall
         cssW = Math.min(containerW, containerH * aspectRatio);
         cssH = cssW / aspectRatio;
       } else {
-        // Taller than wide
         cssH = Math.min(containerH, containerW / aspectRatio);
         cssW = cssH * aspectRatio;
       }
-
-      // Ensure it fits in container
-      if (cssW > containerW) {
-        cssW = containerW;
-        cssH = cssW / aspectRatio;
-      }
-      if (cssH > containerH) {
-        cssH = containerH;
-        cssW = cssH * aspectRatio;
-      }
+      if (cssW > containerW) { cssW = containerW; cssH = cssW / aspectRatio; }
+      if (cssH > containerH) { cssH = containerH; cssW = cssH * aspectRatio; }
 
       displayCanvas.style.width = Math.round(cssW) + 'px';
       displayCanvas.style.height = Math.round(cssH) + 'px';
@@ -452,16 +485,12 @@ const CanvasEngine = (function () {
     const cssW = parseInt(displayCanvas.style.width) || displayCanvas.width;
     const cssH = parseInt(displayCanvas.style.height) || displayCanvas.height;
 
-    // Draw checkerboard
     displayCtx.save();
     displayCtx.fillStyle = checkerPattern || '#222';
     displayCtx.fillRect(0, 0, cssW, cssH);
     displayCtx.restore();
 
-    // Render offscreen at internal resolution
     renderOffscreen();
-
-    // Draw offscreen to display canvas (maintaining aspect ratio)
     displayCtx.drawImage(offscreen, 0, 0, cssW, cssH);
   }
 
@@ -469,14 +498,11 @@ const CanvasEngine = (function () {
     const w = internalWidth;
     const h = internalHeight;
     offCtx.clearRect(0, 0, w, h);
-
-    // 1. White base (so multiply works correctly)
     offCtx.fillStyle = '#FFFFFF';
     offCtx.fillRect(0, 0, w, h);
 
-    // 2. Draw user images with mask
-    if (userImages.length > 0) {
-      // Ensure userLayerCanvas matches current dimensions
+    const visibleLayers = layers.filter(l => l.visible);
+    if (visibleLayers.length > 0) {
       if (userLayerCanvas.width !== w || userLayerCanvas.height !== h) {
         userLayerCanvas.width = w;
         userLayerCanvas.height = h;
@@ -484,15 +510,44 @@ const CanvasEngine = (function () {
       }
       userLayerCtx.clearRect(0, 0, w, h);
 
-      // Draw all user images layered
-      for (const imgData of userImages) {
+      for (const layer of visibleLayers) {
         userLayerCtx.save();
-        userLayerCtx.globalAlpha = state.opacity;
-        drawUserImage(userLayerCtx, w, h, imgData.image);
+        userLayerCtx.globalAlpha = layer.opacity;
+        userLayerCtx.globalCompositeOperation = layer.blendMode || 'source-over';
+
+        // Per-layer panel clip (restrict to selected panels only)
+        if (layer.selectedPanels && layer.selectedPanels.length > 0 && currentModel) {
+          userLayerCtx.beginPath();
+          for (const idx of layer.selectedPanels) {
+            const p = currentModel.panels[idx];
+            if (!p) continue;
+            const r = Math.min(w, h) * 0.012;
+            const px = p.x * w, py = p.y * h, pw = p.w * w, ph = p.h * h;
+            userLayerCtx.moveTo(px + r, py);
+            userLayerCtx.lineTo(px + pw - r, py);
+            userLayerCtx.quadraticCurveTo(px + pw, py, px + pw, py + r);
+            userLayerCtx.lineTo(px + pw, py + ph - r);
+            userLayerCtx.quadraticCurveTo(px + pw, py + ph, px + pw - r, py + ph);
+            userLayerCtx.lineTo(px + r, py + ph);
+            userLayerCtx.quadraticCurveTo(px, py + ph, px, py + ph - r);
+            userLayerCtx.lineTo(px, py + r);
+            userLayerCtx.quadraticCurveTo(px, py, px + r, py);
+          }
+          userLayerCtx.clip();
+        }
+
+        if (layer.backgroundColor) {
+          userLayerCtx.fillStyle = layer.backgroundColor;
+          userLayerCtx.fillRect(0, 0, w, h);
+        }
+
+        if (layer.image) {
+          drawLayerImage(userLayerCtx, w, h, layer);
+        }
+
         userLayerCtx.restore();
       }
 
-      // Apply mask: clip user images to panel areas only
       if (maskCanvas) {
         userLayerCtx.save();
         userLayerCtx.globalCompositeOperation = 'destination-in';
@@ -500,36 +555,33 @@ const CanvasEngine = (function () {
         userLayerCtx.restore();
       }
 
-      // Composite masked user layer onto main offscreen
       offCtx.drawImage(userLayerCanvas, 0, 0);
     }
 
-    // 3. Multiply blend template on top (preserves panel outlines)
     if (templateImage) {
       offCtx.save();
-      offCtx.globalAlpha = 1;
       offCtx.globalCompositeOperation = 'multiply';
       offCtx.drawImage(templateImage, 0, 0, w, h);
-      offCtx.globalCompositeOperation = 'source-over';
       offCtx.restore();
     }
   }
 
-  function drawUserImage(ctx, canvasW, canvasH, img) {
+  function drawLayerImage(ctx, canvasW, canvasH, layer) {
+    const img = layer.image;
     const imgW = img.naturalWidth || img.width;
     const imgH = img.naturalHeight || img.height;
     const cx = canvasW / 2;
     const cy = canvasH / 2;
 
-    switch (state.fillMode) {
+    switch (layer.fillMode) {
       case 'tile': {
         ctx.save();
         const pattern = ctx.createPattern(img, 'repeat');
         if (pattern) {
           const matrix = new DOMMatrix();
-          matrix.translateSelf(cx + state.offsetX, cy + state.offsetY);
-          matrix.rotateSelf(state.rotation);
-          matrix.scaleSelf(state.scale, state.scale);
+          matrix.translateSelf(cx + layer.offsetX, cy + layer.offsetY);
+          matrix.rotateSelf(layer.rotation);
+          matrix.scaleSelf(layer.scale, layer.scale);
           matrix.translateSelf(-cx, -cy);
           pattern.setTransform(matrix);
           ctx.fillStyle = pattern;
@@ -538,58 +590,48 @@ const CanvasEngine = (function () {
         ctx.restore();
         break;
       }
-
       case 'stretch': {
         ctx.save();
-        ctx.translate(cx + state.offsetX, cy + state.offsetY);
-        ctx.rotate(state.rotation * Math.PI / 180);
-        ctx.scale(state.scale, state.scale);
+        ctx.translate(cx + layer.offsetX, cy + layer.offsetY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
+        ctx.scale(layer.scale, layer.scale);
         ctx.drawImage(img, -canvasW / 2, -canvasH / 2, canvasW, canvasH);
         ctx.restore();
         break;
       }
-
       case 'fit': {
-        const fitScale = Math.min(canvasW / imgW, canvasH / imgH) * state.scale;
+        const fitScale = Math.min(canvasW / imgW, canvasH / imgH) * layer.scale;
         const drawW = imgW * fitScale;
         const drawH = imgH * fitScale;
         ctx.save();
-        ctx.translate(cx + state.offsetX, cy + state.offsetY);
-        ctx.rotate(state.rotation * Math.PI / 180);
+        ctx.translate(cx + layer.offsetX, cy + layer.offsetY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
         ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
         ctx.restore();
         break;
       }
-
       case 'center': {
-        const cs = state.scale;
-        const drawW2 = imgW * cs;
-        const drawH2 = imgH * cs;
+        const drawW = imgW * layer.scale;
+        const drawH = imgH * layer.scale;
         ctx.save();
-        ctx.translate(cx + state.offsetX, cy + state.offsetY);
-        ctx.rotate(state.rotation * Math.PI / 180);
-        ctx.drawImage(img, -drawW2 / 2, -drawH2 / 2, drawW2, drawH2);
+        ctx.translate(cx + layer.offsetX, cy + layer.offsetY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
+        ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
         ctx.restore();
         break;
       }
     }
   }
 
-  /**
-   * Export the composited image as a PNG blob.
-   */
-  async function exportPNG(resolution, filename) {
-    // Scale export dimensions proportionally to template aspect ratio
+  // ========================
+  // Export
+  // ========================
+
+  async function exportPNG(resolution) {
     const aspectRatio = internalWidth / internalHeight;
     const exportW = resolution;
     const exportH = Math.round(resolution / aspectRatio);
 
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = exportW;
-    exportCanvas.height = exportH;
-    const ectx = exportCanvas.getContext('2d');
-
-    // Render at export resolution
     const origW = internalWidth;
     const origH = internalHeight;
     const origSize = internalSize;
@@ -599,36 +641,26 @@ const CanvasEngine = (function () {
     const tempOff = document.createElement('canvas');
     tempOff.width = exportW;
     tempOff.height = exportH;
-    const tempCtx = tempOff.getContext('2d');
 
     internalWidth = exportW;
     internalHeight = exportH;
     internalSize = Math.max(exportW, exportH);
     offscreen = tempOff;
-    offCtx = tempCtx;
+    offCtx = tempOff.getContext('2d');
 
     renderOffscreen();
 
-    ectx.drawImage(tempOff, 0, 0);
-
-    // Restore
     internalWidth = origW;
     internalHeight = origH;
     internalSize = origSize;
     offscreen = origOff;
     offCtx = origCtx;
 
-    // Convert to blob
     return new Promise((resolve) => {
-      exportCanvas.toBlob((blob) => {
-        resolve(blob);
-      }, 'image/png');
+      tempOff.toBlob((blob) => resolve(blob), 'image/png');
     });
   }
 
-  /**
-   * Render a preview at a given size and return a data URL.
-   */
   function getPreviewDataURL(previewSize) {
     const aspectRatio = internalWidth / internalHeight;
     const pw = previewSize;
@@ -636,14 +668,10 @@ const CanvasEngine = (function () {
     const c = document.createElement('canvas');
     c.width = pw;
     c.height = ph;
-    const ctx2 = c.getContext('2d');
-    ctx2.drawImage(offscreen, 0, 0, pw, ph);
+    c.getContext('2d').drawImage(offscreen, 0, 0, pw, ph);
     return c.toDataURL('image/png');
   }
 
-  /**
-   * Get template-only render for Before/After.
-   */
   function getTemplateOnlyDataURL(previewSize) {
     const aspectRatio = internalWidth / internalHeight;
     const pw = previewSize;
@@ -654,41 +682,33 @@ const CanvasEngine = (function () {
     const ctx2 = c.getContext('2d');
     ctx2.fillStyle = '#FFFFFF';
     ctx2.fillRect(0, 0, pw, ph);
-    if (templateImage) {
-      ctx2.drawImage(templateImage, 0, 0, pw, ph);
-    }
+    if (templateImage) ctx2.drawImage(templateImage, 0, 0, pw, ph);
     return c.toDataURL('image/png');
-  }
-
-  function hasUserImage() {
-    return userImages.length > 0;
-  }
-
-  function clearUserImages() {
-    userImages = [];
-    resetState();
-    render();
-  }
-
-  function getUserImageCount() {
-    return userImages.length;
   }
 
   return {
     init,
     setTemplate,
-    addUserImage,
-    removeUserImage,
-    updateUserImage,
-    updateState,
-    getState,
-    resetState,
+    // Layer API
+    addLayer,
+    removeLayer,
+    updateLayer,
+    updateLayerImage,
+    getLayer,
+    getLayers,
+    getLayerCount,
+    setSelectedLayer,
+    getSelectedLayer,
+    getSelectedLayerId,
+    moveLayer,
+    resetLayer,
+    clearLayers,
+    hasLayers,
+    getCurrentModel: () => currentModel,
+    // Rendering
     render,
     exportPNG,
     getPreviewDataURL,
     getTemplateOnlyDataURL,
-    hasUserImage,
-    clearUserImages,
-    getUserImageCount,
   };
 })();

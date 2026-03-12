@@ -481,7 +481,25 @@ const CanvasEngine = (function () {
       bright[i] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
     }
 
-    const THRESHOLD = 180;
+    // Morphological erosion: thicken boundary lines so flood-fill can't leak
+    // through anti-aliased edges
+    const EROSION_R = 2;
+    const eroded = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let minVal = 255;
+        const y0 = Math.max(0, y - EROSION_R), y1 = Math.min(h - 1, y + EROSION_R);
+        const x0 = Math.max(0, x - EROSION_R), x1 = Math.min(w - 1, x + EROSION_R);
+        for (let ny = y0; ny <= y1; ny++) {
+          for (let nx = x0; nx <= x1; nx++) {
+            minVal = Math.min(minVal, bright[ny * w + nx]);
+          }
+        }
+        eroded[y * w + x] = minVal;
+      }
+    }
+
+    const THRESHOLD = 200;
 
     for (let pi = 0; pi < currentModel.panels.length; pi++) {
       const p = currentModel.panels[pi];
@@ -489,13 +507,13 @@ const CanvasEngine = (function () {
       let cy = Math.round((p.y + p.h / 2) * h);
 
       // Ensure starting point is on a bright pixel; search nearby if not
-      if (bright[cy * w + cx] < THRESHOLD) {
+      if (eroded[cy * w + cx] < THRESHOLD) {
         let found = false;
         for (let r = 1; r < 50 && !found; r++) {
           for (let dy = -r; dy <= r && !found; dy++) {
             for (let dx = -r; dx <= r && !found; dx++) {
               const nx = cx + dx, ny = cy + dy;
-              if (nx >= 0 && nx < w && ny >= 0 && ny < h && bright[ny * w + nx] >= THRESHOLD) {
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h && eroded[ny * w + nx] >= THRESHOLD) {
                 cx = nx; cy = ny; found = true;
               }
             }
@@ -503,9 +521,9 @@ const CanvasEngine = (function () {
         }
       }
 
-      // BFS flood fill from center within expanded bounds
+      // BFS flood fill using eroded brightness (prevents leaking through thin lines)
       const filled = new Uint8Array(w * h);
-      const margin = 20;
+      const margin = 10;
       const minX = Math.max(0, Math.floor(p.x * w) - margin);
       const maxX = Math.min(w - 1, Math.ceil((p.x + p.w) * w) + margin);
       const minY = Math.max(0, Math.floor(p.y * h) - margin);
@@ -514,7 +532,7 @@ const CanvasEngine = (function () {
       const queue = new Int32Array(w * h);
       let head = 0, tail = 0;
       const startIdx = cy * w + cx;
-      if (cx >= 0 && cx < w && cy >= 0 && cy < h && bright[startIdx] >= THRESHOLD) {
+      if (cx >= 0 && cx < w && cy >= 0 && cy < h && eroded[startIdx] >= THRESHOLD) {
         queue[tail++] = startIdx;
         filled[startIdx] = 1;
       }
@@ -532,7 +550,7 @@ const CanvasEngine = (function () {
         ];
 
         for (const nIdx of neighbors) {
-          if (nIdx >= 0 && !filled[nIdx] && bright[nIdx] >= THRESHOLD) {
+          if (nIdx >= 0 && !filled[nIdx] && eroded[nIdx] >= THRESHOLD) {
             filled[nIdx] = 1;
             queue[tail++] = nIdx;
           }

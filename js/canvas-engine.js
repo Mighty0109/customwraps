@@ -41,10 +41,12 @@ const CanvasEngine = (function () {
   let showPanelNumbers = false;
   let panelMasks = [];  // per-panel flood-fill masks
   let panelCentroids = [];  // actual center of each panel's filled area {x, y} in 0..1
+  let panelColors = [];  // per-panel background color (null or CSS color string)
   let tempLayerCanvas = null;
   let tempLayerCtx = null;
   let combinedMaskCanvas = null;
   let combinedMaskCtx = null;
+  let colorPickerEl = null;  // hidden <input type="color"> for panel color picking
 
   // ========================
   // Init
@@ -263,6 +265,9 @@ const CanvasEngine = (function () {
   function setupInputEvents() {
     if (!displayCanvas) return;
 
+    // Panel number tap → color picker
+    setupPanelColorPicker();
+
     displayCanvas.addEventListener('touchstart', onTouchStart, { passive: false });
     displayCanvas.addEventListener('touchmove', onTouchMove, { passive: false });
     displayCanvas.addEventListener('touchend', onTouchEnd, { passive: false });
@@ -462,6 +467,7 @@ const CanvasEngine = (function () {
   function generatePanelMasks() {
     panelMasks = [];
     panelCentroids = [];
+    panelColors = [];
     if (!templateImage) return;
 
     const w = internalWidth;
@@ -563,6 +569,104 @@ const CanvasEngine = (function () {
   }
 
   // ========================
+  // Panel Color Picker
+  // ========================
+
+  function setupPanelColorPicker() {
+    // Create hidden color input
+    colorPickerEl = document.createElement('input');
+    colorPickerEl.type = 'color';
+    colorPickerEl.style.position = 'absolute';
+    colorPickerEl.style.opacity = '0';
+    colorPickerEl.style.pointerEvents = 'none';
+    colorPickerEl.style.width = '0';
+    colorPickerEl.style.height = '0';
+    document.body.appendChild(colorPickerEl);
+
+    let pickerPanelIdx = -1;
+
+    colorPickerEl.addEventListener('input', () => {
+      if (pickerPanelIdx >= 0) {
+        panelColors[pickerPanelIdx] = colorPickerEl.value;
+        render();
+      }
+    });
+
+    // Detect tap on panel number badge
+    function hitTestPanel(clientX, clientY) {
+      if (!showPanelNumbers || !panelCentroids.length) return -1;
+      const rect = displayCanvas.getBoundingClientRect();
+      const cssW = parseInt(displayCanvas.style.width) || rect.width;
+      const cssH = parseInt(displayCanvas.style.height) || rect.height;
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      const fontSize = 9;
+      const hitR = fontSize * 1.2;
+
+      for (let i = 0; i < panelCentroids.length; i++) {
+        const cx = panelCentroids[i].x * cssW;
+        const cy = panelCentroids[i].y * cssH;
+        const dx = x - cx;
+        const dy = y - cy;
+        if (dx * dx + dy * dy <= hitR * hitR) return i;
+      }
+      return -1;
+    }
+
+    // Track touch movement to distinguish tap from drag
+    let touchStartX = 0, touchStartY = 0, touchMoved = false;
+
+    displayCanvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchMoved = false;
+      }
+    }, { passive: true });
+
+    displayCanvas.addEventListener('touchmove', () => {
+      touchMoved = true;
+    }, { passive: true });
+
+    displayCanvas.addEventListener('touchend', (e) => {
+      if (touchMoved || e.changedTouches.length === 0) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      if (dx * dx + dy * dy > 100) return; // moved too far, not a tap
+
+      const idx = hitTestPanel(t.clientX, t.clientY);
+      if (idx >= 0) {
+        pickerPanelIdx = idx;
+        colorPickerEl.value = panelColors[idx] || '#ff0000';
+        colorPickerEl.click();
+      }
+    }, { passive: true });
+
+    displayCanvas.addEventListener('click', (e) => {
+      const idx = hitTestPanel(e.clientX, e.clientY);
+      if (idx >= 0) {
+        pickerPanelIdx = idx;
+        colorPickerEl.value = panelColors[idx] || '#ff0000';
+        colorPickerEl.click();
+      }
+    });
+  }
+
+  function setPanelColor(idx, color) {
+    if (idx >= 0 && idx < panelMasks.length) {
+      panelColors[idx] = color;
+      render();
+    }
+  }
+
+  function clearPanelColors() {
+    panelColors = [];
+    render();
+  }
+
+  // ========================
   // Rendering
   // ========================
 
@@ -644,6 +748,27 @@ const CanvasEngine = (function () {
     offCtx.clearRect(0, 0, w, h);
     offCtx.fillStyle = '#FFFFFF';
     offCtx.fillRect(0, 0, w, h);
+
+    // Draw per-panel background colors
+    if (panelColors.length > 0 && panelMasks.length > 0) {
+      if (!tempLayerCanvas || tempLayerCanvas.width !== w || tempLayerCanvas.height !== h) {
+        tempLayerCanvas = document.createElement('canvas');
+        tempLayerCanvas.width = w;
+        tempLayerCanvas.height = h;
+        tempLayerCtx = tempLayerCanvas.getContext('2d');
+      }
+      for (let i = 0; i < panelColors.length; i++) {
+        if (!panelColors[i] || !panelMasks[i]) continue;
+        tempLayerCtx.clearRect(0, 0, w, h);
+        tempLayerCtx.fillStyle = panelColors[i];
+        tempLayerCtx.fillRect(0, 0, w, h);
+        tempLayerCtx.save();
+        tempLayerCtx.globalCompositeOperation = 'destination-in';
+        tempLayerCtx.drawImage(panelMasks[i], 0, 0);
+        tempLayerCtx.restore();
+        offCtx.drawImage(tempLayerCanvas, 0, 0);
+      }
+    }
 
     const visibleLayers = layers.filter(l => l.visible);
     if (visibleLayers.length > 0) {
@@ -867,6 +992,9 @@ const CanvasEngine = (function () {
     hasLayers,
     getCurrentModel: () => currentModel,
     getPanelCount: () => panelMasks.length,
+    setPanelColor,
+    clearPanelColors,
+    getPanelColors: () => [...panelColors],
     setShowPanelNumbers: (v) => { showPanelNumbers = v; render(); },
     // Rendering
     render,

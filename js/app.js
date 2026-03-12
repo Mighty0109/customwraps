@@ -434,42 +434,57 @@ const App = (function () {
     syncControlsFromEngine(layer);
   }
 
-  function buildPanelSelector(container) {
-    container.innerHTML = '';
-    if (!currentModel) return;
+  let panelSelectorInitialized = false;
 
+  function buildPanelSelector(container) {
     const count = CanvasEngine.getPanelCount();
-    if (count === 0) return;
     const layer = CanvasEngine.getSelectedLayer();
     const selected = layer ? layer.selectedPanels : null;
 
-    // Show numbers on canvas when panel selector is visible
-    CanvasEngine.setShowPanelNumbers(true);
+    // Only rebuild DOM if panel count changed
+    const currentCount = container.querySelectorAll('.panel-check').length;
+    if (currentCount !== count || !currentModel) {
+      container.innerHTML = '';
+      if (!currentModel || count === 0) return;
 
-    for (let i = 0; i < count; i++) {
-      const label = document.createElement('label');
-      const isChecked = selected && selected.includes(i);
-      label.className = 'panel-check' + (isChecked ? ' checked' : '');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = isChecked;
-      cb.dataset.idx = i;
-      const span = document.createElement('span');
-      span.textContent = (i + 1);
-      label.appendChild(cb);
-      label.appendChild(span);
-      container.appendChild(label);
+      for (let i = 0; i < count; i++) {
+        const label = document.createElement('label');
+        label.className = 'panel-check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.dataset.idx = i;
+        const span = document.createElement('span');
+        span.textContent = (i + 1);
+        label.appendChild(cb);
+        label.appendChild(span);
+        container.appendChild(label);
+      }
     }
 
-    container.addEventListener('change', () => {
-      const checked = container.querySelectorAll('input[type="checkbox"]:checked');
-      const indices = Array.from(checked).map(cb => parseInt(cb.dataset.idx));
-      container.querySelectorAll('.panel-check').forEach(l => {
-        const cb = l.querySelector('input');
-        l.classList.toggle('checked', cb.checked);
-      });
-      updateSelectedLayer({ selectedPanels: indices.length > 0 ? indices : null });
+    // Update checked state without rebuilding DOM
+    container.querySelectorAll('.panel-check').forEach(l => {
+      const cb = l.querySelector('input');
+      const idx = parseInt(cb.dataset.idx);
+      const isChecked = selected && selected.includes(idx);
+      cb.checked = isChecked;
+      l.classList.toggle('checked', isChecked);
     });
+
+    CanvasEngine.setShowPanelNumbers(true);
+
+    // Attach listener only once
+    if (!panelSelectorInitialized) {
+      panelSelectorInitialized = true;
+      container.addEventListener('change', () => {
+        const checked = container.querySelectorAll('input[type="checkbox"]:checked');
+        const indices = Array.from(checked).map(cb => parseInt(cb.dataset.idx));
+        container.querySelectorAll('.panel-check').forEach(l => {
+          const cb = l.querySelector('input');
+          l.classList.toggle('checked', cb.checked);
+        });
+        updateSelectedLayer({ selectedPanels: indices.length > 0 ? indices : null });
+      });
+    }
   }
 
   function syncControlsFromEngine(layer) {

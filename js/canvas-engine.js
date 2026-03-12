@@ -604,45 +604,7 @@ const CanvasEngine = (function () {
     displayCtx.drawImage(offscreen, 0, 0, cssW, cssH);
 
     if (showPanelNumbers) {
-      drawPanelOverlays(displayCtx, cssW, cssH);
       drawPanelNumbers(displayCtx, cssW, cssH);
-    }
-  }
-
-  const PANEL_COLORS = [
-    'rgba(255,  59,  48, 0.35)',  // 1  red
-    'rgba( 50, 173, 230, 0.35)',  // 2  blue
-    'rgba( 52, 199,  89, 0.35)',  // 3  green
-    'rgba(255, 149,   0, 0.35)',  // 4  orange
-    'rgba(175, 82,  222, 0.35)',  // 5  purple
-    'rgba(255, 204,   0, 0.35)',  // 6  yellow
-    'rgba(255,  45,  85, 0.35)',  // 7  pink
-    'rgba(  0, 199, 190, 0.35)',  // 8  teal
-    'rgba( 88,  86, 214, 0.35)',  // 9  indigo
-    'rgba(162, 132,  94, 0.35)',  // 10 brown
-    'rgba(142, 142, 147, 0.35)',  // 11 gray
-  ];
-
-  function drawPanelOverlays(ctx, w, h) {
-    if (!panelMasks.length) return;
-
-    // Draw each panel mask with a distinct color
-    const tempC = document.createElement('canvas');
-    tempC.width = internalWidth;
-    tempC.height = internalHeight;
-    const tCtx = tempC.getContext('2d');
-
-    for (let i = 0; i < panelMasks.length; i++) {
-      tCtx.clearRect(0, 0, internalWidth, internalHeight);
-      // Fill with panel color
-      tCtx.fillStyle = PANEL_COLORS[i % PANEL_COLORS.length];
-      tCtx.fillRect(0, 0, internalWidth, internalHeight);
-      // Mask to panel shape
-      tCtx.globalCompositeOperation = 'destination-in';
-      tCtx.drawImage(panelMasks[i], 0, 0);
-      tCtx.globalCompositeOperation = 'source-over';
-      // Draw onto display
-      ctx.drawImage(tempC, 0, 0, w, h);
     }
   }
 

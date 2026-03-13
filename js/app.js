@@ -63,10 +63,10 @@ var App = (function () {
         '<div class="model-card-thumb">' +
           '<img src="' + thumbUrl + '" alt="' + model.name + '" loading="lazy"' +
           ' onerror="this.src=\'' + fallbackSvg + '\'">' +
-        '</div>' +
-        '<div class="model-card-info">' +
-          '<div class="model-card-name">' + model.name + '</div>' +
-          (model.subtitle ? '<div class="model-card-subtitle">' + model.subtitle + '</div>' : '') +
+          '<div class="model-card-info">' +
+            '<div class="model-card-name">' + model.name + '</div>' +
+            (model.subtitle ? '<div class="model-card-subtitle">' + model.subtitle + '</div>' : '') +
+          '</div>' +
         '</div>';
       card.addEventListener('click', function () { selectModel(model); });
       grid.appendChild(card);

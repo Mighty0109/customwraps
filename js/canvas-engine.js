@@ -704,6 +704,15 @@ const CanvasEngine = (function () {
     if (showPanelNumbers) {
       drawPanelNumbers(displayCtx, cssW, cssH);
     }
+
+    // Sync layer sidebar height with canvas height
+    const canvasArea = displayCanvas.closest('.canvas-area');
+    if (canvasArea && canvasArea.classList.contains('split-mode')) {
+      const sidebar = canvasArea.querySelector('.layer-sidebar');
+      if (sidebar) {
+        sidebar.style.maxHeight = displayCanvas.style.height;
+      }
+    }
   }
 
   function drawPanelNumbers(ctx, w, h) {

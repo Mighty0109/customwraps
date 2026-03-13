@@ -505,9 +505,9 @@ h4 { font-size: 0.95rem; font-weight: 600; }
   align-items: stretch !important;
   flex-direction: row !important;
   gap: 0;
-  max-height: 40dvh;
   padding-bottom: 0;
   overflow: hidden;
+  height: fit-content;
 }
 
 .canvas-area.split-mode .canvas-wrapper {

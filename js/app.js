@@ -291,12 +291,6 @@ const App = (function () {
     const layers = CanvasEngine.getLayers();
     const selectedId = CanvasEngine.getSelectedLayerId();
 
-    // Count header
-    const header = document.createElement('div');
-    header.className = 'layer-list-header';
-    header.textContent = `레이어 ${layers.length} / ${MAX_LAYERS}`;
-    layerListContainer.appendChild(header);
-
     if (layers.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'layer-list-empty';

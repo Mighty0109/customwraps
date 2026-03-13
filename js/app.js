@@ -707,10 +707,11 @@ var App = (function () {
       '</div>' +
       '<button class="btn btn-primary btn-download" id="btn-download">' +
         '<svg width="20" height="20" viewBox="0 0 20 20" fill="none">' +
-          '<path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-          '<path d="M3 15V16C3 16.55 3.45 17 4 17H16C16.55 17 17 16.55 17 16V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '<path d="M4 12V15C4 15.55 4.45 16 5 16H15C15.55 16 16 15.55 16 15V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '<path d="M7 8L10 11L13 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '<path d="M10 4V11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
         '</svg>' +
-        '\ub2e4\uc6b4\ub85c\ub4dc' +
+        '\uc800\uc7a5 / \uacf5\uc720' +
       '</button>' +
       '<div class="export-size-warning hidden" id="export-size-warning"></div>' +
       '<div class="export-usb-info">' +
@@ -740,16 +741,29 @@ var App = (function () {
       downloadBtn.textContent = '\uc0dd\uc131 \uc911...';
 
       CW.Export.toPNG(selectedRes).then(function (blob) {
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = filename + '.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        UI.showToast('\ub2e4\uc6b4\ub85c\ub4dc\uac00 \uc2dc\uc791\ub418\uc5c8\uc2b5\ub2c8\ub2e4!');
-        setTimeout(function () { UI.closeBottomSheet(sheet); }, 500);
+        var file = new File([blob], filename + '.png', { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          return navigator.share({
+            files: [file],
+            title: filename,
+          }).then(function () {
+            UI.showToast('\uac00\uc838\uac14\uc2b5\ub2c8\ub2e4!');
+            setTimeout(function () { UI.closeBottomSheet(sheet); }, 500);
+          }).catch(function (e) {
+            if (e.name !== 'AbortError') throw e;
+          });
+        } else {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = filename + '.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          UI.showToast('\ub2e4\uc6b4\ub85c\ub4dc\uac00 \uc2dc\uc791\ub418\uc5c8\uc2b5\ub2c8\ub2e4!');
+          setTimeout(function () { UI.closeBottomSheet(sheet); }, 500);
+        }
       }).catch(function (err) {
         UI.showToast('\ub0b4\ubcf4\ub0b4\uae30 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4.');
         console.error(err);

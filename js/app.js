@@ -389,6 +389,12 @@ var App = (function () {
     var maxLayers = CW.LayerStore.getMaxLayers();
     uploadZoneContainer.classList.toggle('is-full', layers.length >= maxLayers);
     uploadZoneContainer.classList.toggle('has-image', layers.length > 0);
+
+    // Update drop zone hint with layer count
+    var hint = uploadZoneContainer.querySelector('.drop-zone-hint');
+    if (hint) {
+      hint.textContent = 'PNG, JPG, WebP (' + layers.length + '/' + maxLayers + ')';
+    }
   }
 
   function openImageEditor(layer) {

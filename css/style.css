@@ -489,7 +489,9 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 .canvas-area.full-width-mode .canvas-wrapper {
   width: 100%;
   height: auto;
-  display: block;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .canvas-area.full-width-mode #main-canvas {

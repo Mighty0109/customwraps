@@ -127,10 +127,6 @@ var App = (function () {
 
     var canvasArea = document.querySelector('.canvas-area');
     var layerSidebar = document.getElementById('layer-list-container');
-    var beforeAfterBtn = document.getElementById('btn-before-after');
-    if (beforeAfterBtn) {
-      beforeAfterBtn.classList.toggle('hidden', tab !== 'controls');
-    }
     if (tab === 'settings') {
       canvasArea.classList.add('hidden');
       canvasArea.classList.remove('split-mode', 'full-width-mode');

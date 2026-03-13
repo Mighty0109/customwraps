@@ -106,6 +106,9 @@ const App = (function () {
     const zone = UI.createDropZone({ onFile: handleImageUpload, multiple: true });
     uploadZoneContainer.appendChild(zone);
 
+    // Text layer input
+    buildTextInput(uploadZoneContainer);
+
     // Build controls (once)
     buildControls();
   }
@@ -124,6 +127,122 @@ const App = (function () {
     } else if (CanvasEngine.getSelectedLayer()) {
       CanvasEngine.setShowPanelNumbers(true);
     }
+  }
+
+  // ========================
+  // Text Layer
+  // ========================
+
+  const TEXT_FONTS = [
+    { value: "'Noto Sans KR', sans-serif", label: 'Noto Sans KR' },
+    { value: "'Noto Serif KR', serif", label: 'Noto Serif KR' },
+    { value: "'Black Han Sans', sans-serif", label: 'Black Han Sans' },
+    { value: "'Jua', sans-serif", label: 'Jua' },
+    { value: "'Do Hyeon', sans-serif", label: 'Do Hyeon' },
+  ];
+
+  function buildTextInput(container) {
+    const wrap = document.createElement('div');
+    wrap.className = 'text-input-section';
+
+    const label = document.createElement('div');
+    label.className = 'control-section-label';
+    label.textContent = '텍스트 추가';
+    wrap.appendChild(label);
+
+    const inputRow = document.createElement('div');
+    inputRow.className = 'text-input-row';
+
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.className = 'text-layer-input';
+    textInput.placeholder = '텍스트 입력...';
+    inputRow.appendChild(textInput);
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-primary btn-text-add';
+    addBtn.textContent = '추가';
+    inputRow.appendChild(addBtn);
+    wrap.appendChild(inputRow);
+
+    const optionsRow = document.createElement('div');
+    optionsRow.className = 'text-options-row';
+
+    const fontSelect = document.createElement('select');
+    fontSelect.className = 'text-font-select';
+    TEXT_FONTS.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.value;
+      opt.textContent = f.label;
+      opt.style.fontFamily = f.value;
+      fontSelect.appendChild(opt);
+    });
+    optionsRow.appendChild(fontSelect);
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'text-color-input';
+    colorInput.value = '#000000';
+    optionsRow.appendChild(colorInput);
+
+    wrap.appendChild(optionsRow);
+    container.appendChild(wrap);
+
+    addBtn.addEventListener('click', () => {
+      const text = textInput.value.trim();
+      if (!text) return;
+      addTextLayer(text, fontSelect.value, colorInput.value);
+      textInput.value = '';
+    });
+
+    textInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        addBtn.click();
+      }
+    });
+  }
+
+  function addTextLayer(text, fontFamily, color) {
+    if (CanvasEngine.getLayerCount() >= MAX_LAYERS) {
+      UI.showToast(`최대 ${MAX_LAYERS}개 레이어까지 추가할 수 있습니다.`);
+      return;
+    }
+
+    const size = 1024;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Determine font size to fit width with padding
+    let fontSize = 120;
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    let measured = ctx.measureText(text);
+    while (measured.width > size * 0.85 && fontSize > 20) {
+      fontSize -= 4;
+      ctx.font = `bold ${fontSize}px ${fontFamily}`;
+      measured = ctx.measureText(text);
+    }
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = color;
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, size / 2, size / 2);
+
+    const img = new Image();
+    img.onload = () => {
+      const id = 'text_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      CanvasEngine.addLayer(img, id, text);
+      CanvasEngine.setSelectedLayer(id);
+      refreshLayerList();
+      refreshControls();
+      if (CanvasEngine.getLayerCount() === 1 && window.innerWidth < 1200) {
+        setTimeout(() => showTab('controls'), 300);
+      }
+    };
+    img.src = canvas.toDataURL('image/png');
   }
 
   // ========================

@@ -110,7 +110,13 @@ const CanvasEngine = (function () {
     };
   }
 
+  const MAX_LAYERS = 20;
+
   function addLayer(img, id, name) {
+    if (layers.length >= MAX_LAYERS) {
+      UI.showToast('레이어는 최대 ' + MAX_LAYERS + '개까지 추가할 수 있습니다.');
+      return;
+    }
     const layer = {
       id: id,
       image: img,

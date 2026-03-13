@@ -127,11 +127,21 @@ var App = (function () {
 
     var canvasArea = document.querySelector('.canvas-area');
     var layerSidebar = document.getElementById('layer-list-container');
-    if (tab === 'upload') {
+    var beforeAfterBtn = document.getElementById('btn-before-after');
+    if (beforeAfterBtn) {
+      beforeAfterBtn.classList.toggle('hidden', tab !== 'upload');
+    }
+    if (tab === 'settings') {
+      canvasArea.classList.add('hidden');
+      canvasArea.classList.remove('split-mode', 'full-width-mode');
+      layerSidebar.classList.add('hidden');
+    } else if (tab === 'upload') {
+      canvasArea.classList.remove('hidden');
       canvasArea.classList.add('split-mode');
       canvasArea.classList.remove('full-width-mode');
       layerSidebar.classList.remove('hidden');
     } else {
+      canvasArea.classList.remove('hidden');
       canvasArea.classList.remove('split-mode');
       canvasArea.classList.add('full-width-mode');
       layerSidebar.classList.add('hidden');

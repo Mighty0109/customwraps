@@ -653,21 +653,29 @@ const CanvasEngine = (function () {
 
     const container = displayCanvas.parentElement;
     if (container) {
+      const canvasArea = container.closest('.canvas-area');
+      const isFullWidth = canvasArea && canvasArea.classList.contains('full-width-mode');
       const containerW = container.clientWidth;
       const containerH = container.clientHeight || containerW;
       const dpr = window.devicePixelRatio || 1;
       const aspectRatio = internalWidth / internalHeight;
 
       let cssW, cssH;
-      if (aspectRatio >= 1) {
+      if (isFullWidth) {
+        // Full width mode: fill container width, height follows aspect ratio
+        cssW = containerW;
+        cssH = cssW / aspectRatio;
+      } else if (aspectRatio >= 1) {
         cssW = Math.min(containerW, containerH * aspectRatio);
         cssH = cssW / aspectRatio;
       } else {
         cssH = Math.min(containerH, containerW / aspectRatio);
         cssW = cssH * aspectRatio;
       }
-      if (cssW > containerW) { cssW = containerW; cssH = cssW / aspectRatio; }
-      if (cssH > containerH) { cssH = containerH; cssW = cssH * aspectRatio; }
+      if (!isFullWidth) {
+        if (cssW > containerW) { cssW = containerW; cssH = cssW / aspectRatio; }
+        if (cssH > containerH) { cssH = containerH; cssW = cssH * aspectRatio; }
+      }
 
       displayCanvas.style.width = Math.round(cssW) + 'px';
       displayCanvas.style.height = Math.round(cssH) + 'px';

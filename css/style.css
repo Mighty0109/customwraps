@@ -464,7 +464,7 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 
 .has-image .drop-zone {
   padding: 16px;
-  border-style: solid;
+  border: none;
 }
 
 .has-image .drop-zone-content svg { display: none; }

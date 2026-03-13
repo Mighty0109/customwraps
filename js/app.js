@@ -614,7 +614,9 @@ var App = (function () {
       l.classList.toggle('checked', isChecked);
     });
 
-    CW.PanelDetector.setShowNumbers(true);
+    if (currentTab === 'controls') {
+      CW.PanelDetector.setShowNumbers(true);
+    }
 
     if (!panelSelectorInitialized) {
       panelSelectorInitialized = true;

@@ -655,7 +655,7 @@ const CanvasEngine = (function () {
     if (container) {
       const canvasArea = container.closest('.canvas-area');
       const isFullWidth = canvasArea && canvasArea.classList.contains('full-width-mode');
-      const containerW = container.clientWidth;
+      const containerW = isFullWidth ? (canvasArea.clientWidth || container.clientWidth) : container.clientWidth;
       const containerH = container.clientHeight || containerW;
       const dpr = window.devicePixelRatio || 1;
       const aspectRatio = internalWidth / internalHeight;

@@ -94,8 +94,15 @@
 
       <!-- Upload / Layers Tab -->
       <div class="tab-panel" data-tab="upload">
-        <div id="layer-list-container"></div>
-        <div id="upload-zone-container"></div>
+        <div class="layers-split">
+          <div class="layers-preview">
+            <canvas id="layers-preview-canvas"></canvas>
+          </div>
+          <div class="layers-right">
+            <div id="layer-list-container"></div>
+            <div id="upload-zone-container"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Controls Tab -->

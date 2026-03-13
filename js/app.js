@@ -109,8 +109,36 @@ const App = (function () {
     // Text layer input
     buildTextInput(uploadZoneContainer);
 
+    // Layers preview canvas sync
+    setupLayersPreview();
+
     // Build controls (once)
     buildControls();
+  }
+
+  function setupLayersPreview() {
+    const previewCanvas = document.getElementById('layers-preview-canvas');
+    if (!previewCanvas) return;
+    const previewCtx = previewCanvas.getContext('2d');
+
+    // Observe main canvas changes via render hook
+    const origRender = CanvasEngine.render;
+    CanvasEngine.render = function () {
+      origRender.call(CanvasEngine);
+      updateLayersPreview();
+    };
+
+    function updateLayersPreview() {
+      const dataUrl = CanvasEngine.getPreviewDataURL(300);
+      const img = new Image();
+      img.onload = () => {
+        previewCanvas.width = img.width;
+        previewCanvas.height = img.height;
+        previewCtx.clearRect(0, 0, img.width, img.height);
+        previewCtx.drawImage(img, 0, 0);
+      };
+      img.src = dataUrl;
+    }
   }
 
   function showTab(tab) {

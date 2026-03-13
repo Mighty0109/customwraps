@@ -212,7 +212,7 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 
 .model-card-thumb {
   position: relative;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   background: var(--bg-tertiary);
   overflow: hidden;
 }
@@ -230,6 +230,7 @@ h4 { font-size: 0.95rem; font-weight: 600; }
   right: 0;
   padding: 24px 10px 8px;
   background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+  text-align: right;
 }
 
 .model-card-name {

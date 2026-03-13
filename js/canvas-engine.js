@@ -662,8 +662,8 @@ const CanvasEngine = (function () {
 
       let cssW, cssH;
       if (isFullWidth) {
-        // Full width mode: fill container width, height follows aspect ratio
-        cssW = containerW;
+        // Full width mode: fill 90% of container width, height follows aspect ratio
+        cssW = containerW * 0.9;
         cssH = cssW / aspectRatio;
       } else if (aspectRatio >= 1) {
         cssW = Math.min(containerW, containerH * aspectRatio);

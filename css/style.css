@@ -772,7 +772,7 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 /* Panel Selector */
 .panel-selector {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(10, 1fr);
   gap: 6px;
   margin-bottom: 16px;
 }

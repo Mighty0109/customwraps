@@ -699,14 +699,6 @@ var App = (function () {
         '<img src="' + previewUrl + '" alt="\ubbf8\ub9ac\ubcf4\uae30" width="' + previewSize + '" height="' + previewSize + '">' +
       '</div>' +
       '<div class="export-field">' +
-        '<label for="export-resolution">\ud574\uc0c1\ub3c4</label>' +
-        '<div class="export-resolution-btns">' +
-          '<button class="btn btn-sm res-btn" data-res="512">512px</button>' +
-          '<button class="btn btn-sm res-btn active" data-res="768">768px</button>' +
-          '<button class="btn btn-sm res-btn" data-res="1024">1024px</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="export-field">' +
         '<label for="export-filename">\ud30c\uc77c \uc774\ub984</label>' +
         '<div class="export-filename-wrap">' +
           '<input type="text" id="export-filename" value="my_wrap" maxlength="30" pattern="[a-zA-Z0-9_-]+" placeholder="\uc601\ubb38, \uc22b\uc790, _, -">' +
@@ -733,14 +725,7 @@ var App = (function () {
 
     var sheet = UI.createBottomSheet(content);
 
-    var selectedRes = 768;
-    content.querySelectorAll('.res-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        content.querySelectorAll('.res-btn').forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        selectedRes = parseInt(btn.dataset.res);
-      });
-    });
+    var selectedRes = 1024;
 
     var filenameInput = content.querySelector('#export-filename');
     filenameInput.addEventListener('input', function () {
@@ -755,14 +740,6 @@ var App = (function () {
       downloadBtn.textContent = '\uc0dd\uc131 \uc911...';
 
       CW.Export.toPNG(selectedRes).then(function (blob) {
-        if (blob.size > 1048576) {
-          var lowerRes = selectedRes === 1024 ? 768 : 512;
-          warningEl.textContent = '\ud30c\uc77c \ud06c\uae30\uac00 ' + UI.formatFileSize(blob.size) + '\uc785\ub2c8\ub2e4. ' + lowerRes + 'px\ub85c \ucd95\uc18c\ud569\ub2c8\ub2e4.';
-          warningEl.classList.remove('hidden');
-          return CW.Export.toPNG(lowerRes);
-        }
-        return blob;
-      }).then(function (blob) {
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;

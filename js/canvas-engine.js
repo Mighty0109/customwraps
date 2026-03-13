@@ -265,7 +265,6 @@ const CanvasEngine = (function () {
   function setupInputEvents() {
     if (!displayCanvas) return;
 
-    // Panel number tap → color picker
     setupPanelColorPicker();
 
     displayCanvas.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -572,15 +571,29 @@ const CanvasEngine = (function () {
   // Panel Color Picker
   // ========================
 
+  function hitTestPanel(clientX, clientY) {
+    if (!showPanelNumbers || !panelCentroids.length || !displayCanvas) return -1;
+    const rect = displayCanvas.getBoundingClientRect();
+    const cssW = parseInt(displayCanvas.style.width) || rect.width;
+    const cssH = parseInt(displayCanvas.style.height) || rect.height;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const hitR = 15;
+    for (let i = 0; i < panelCentroids.length; i++) {
+      const cx = panelCentroids[i].x * cssW;
+      const cy = panelCentroids[i].y * cssH;
+      const dx = x - cx;
+      const dy = y - cy;
+      if (dx * dx + dy * dy <= hitR * hitR) return i;
+    }
+    return -1;
+  }
+
   function setupPanelColorPicker() {
-    // Create hidden color input
+    // Create color input positioned offscreen but functional
     colorPickerEl = document.createElement('input');
     colorPickerEl.type = 'color';
-    colorPickerEl.style.position = 'absolute';
-    colorPickerEl.style.opacity = '0';
-    colorPickerEl.style.pointerEvents = 'none';
-    colorPickerEl.style.width = '0';
-    colorPickerEl.style.height = '0';
+    colorPickerEl.style.cssText = 'position:fixed;top:-100px;left:0;width:1px;height:1px;opacity:0.01;';
     document.body.appendChild(colorPickerEl);
 
     let pickerPanelIdx = -1;
@@ -592,63 +605,28 @@ const CanvasEngine = (function () {
       }
     });
 
-    // Detect tap on panel number badge
-    function hitTestPanel(clientX, clientY) {
-      if (!showPanelNumbers || !panelCentroids.length) return -1;
-      const rect = displayCanvas.getBoundingClientRect();
-      const cssW = parseInt(displayCanvas.style.width) || rect.width;
-      const cssH = parseInt(displayCanvas.style.height) || rect.height;
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
+    // Use pointerup to detect taps (works for both mouse and touch)
+    let pointerStartX = 0, pointerStartY = 0;
 
-      const fontSize = 9;
-      const hitR = fontSize * 1.2;
+    displayCanvas.addEventListener('pointerdown', (e) => {
+      pointerStartX = e.clientX;
+      pointerStartY = e.clientY;
+    });
 
-      for (let i = 0; i < panelCentroids.length; i++) {
-        const cx = panelCentroids[i].x * cssW;
-        const cy = panelCentroids[i].y * cssH;
-        const dx = x - cx;
-        const dy = y - cy;
-        if (dx * dx + dy * dy <= hitR * hitR) return i;
-      }
-      return -1;
-    }
+    displayCanvas.addEventListener('pointerup', (e) => {
+      const dx = e.clientX - pointerStartX;
+      const dy = e.clientY - pointerStartY;
+      if (dx * dx + dy * dy > 100) return; // drag, not tap
 
-    // Track touch movement to distinguish tap from drag
-    let touchStartX = 0, touchStartY = 0, touchMoved = false;
-
-    displayCanvas.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchMoved = false;
-      }
-    }, { passive: true });
-
-    displayCanvas.addEventListener('touchmove', () => {
-      touchMoved = true;
-    }, { passive: true });
-
-    displayCanvas.addEventListener('touchend', (e) => {
-      if (touchMoved || e.changedTouches.length === 0) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - touchStartX;
-      const dy = t.clientY - touchStartY;
-      if (dx * dx + dy * dy > 100) return; // moved too far, not a tap
-
-      const idx = hitTestPanel(t.clientX, t.clientY);
-      if (idx >= 0) {
-        pickerPanelIdx = idx;
-        colorPickerEl.value = panelColors[idx] || '#ff0000';
-        colorPickerEl.click();
-      }
-    }, { passive: true });
-
-    displayCanvas.addEventListener('click', (e) => {
       const idx = hitTestPanel(e.clientX, e.clientY);
       if (idx >= 0) {
+        e.stopPropagation();
         pickerPanelIdx = idx;
-        colorPickerEl.value = panelColors[idx] || '#ff0000';
+        colorPickerEl.value = panelColors[idx] || '#3478f6';
+        // Position near the tap and trigger
+        colorPickerEl.style.top = e.clientY + 'px';
+        colorPickerEl.style.left = e.clientX + 'px';
+        colorPickerEl.focus();
         colorPickerEl.click();
       }
     });

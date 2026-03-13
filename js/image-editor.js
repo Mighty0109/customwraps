@@ -322,136 +322,61 @@ const ImageEditor = (function () {
     if (btn) btn.disabled = history.length <= 1;
   }
 
-  // --- Auto Background Removal ---
-  function autoRemoveBackground() {
-    const imageData = editorCtx.getImageData(0, 0, imgWidth, imgHeight);
-    const data = imageData.data;
-    const w = imgWidth;
-    const h = imgHeight;
-    const tolerance = 35;
+  // --- Auto Background Removal (AI) ---
+  let removeBackgroundFn = null;
+  let aiLoading = false;
 
-    // Sample edge pixels to find background color
-    const edgeColors = [];
-    const sampleStep = Math.max(1, Math.floor(Math.min(w, h) / 100));
-    for (let x = 0; x < w; x += sampleStep) {
-      edgeColors.push([data[x * 4], data[x * 4 + 1], data[x * 4 + 2], data[x * 4 + 3]]);
-      const bi = ((h - 1) * w + x) * 4;
-      edgeColors.push([data[bi], data[bi + 1], data[bi + 2], data[bi + 3]]);
-    }
-    for (let y = 0; y < h; y += sampleStep) {
-      const li = (y * w) * 4;
-      edgeColors.push([data[li], data[li + 1], data[li + 2], data[li + 3]]);
-      const ri = (y * w + w - 1) * 4;
-      edgeColors.push([data[ri], data[ri + 1], data[ri + 2], data[ri + 3]]);
-    }
+  async function loadAIModule() {
+    if (removeBackgroundFn) return removeBackgroundFn;
+    const module = await import('https://esm.sh/@imgly/background-removal@1.5.8');
+    removeBackgroundFn = module.removeBackground;
+    return removeBackgroundFn;
+  }
 
-    // Find dominant edge color (most common, ignoring transparent)
-    const colorMap = {};
-    let bestKey = null;
-    let bestCount = 0;
-    for (let i = 0; i < edgeColors.length; i++) {
-      const c = edgeColors[i];
-      if (c[3] < 128) continue;
-      const key = (c[0] >> 4) + ',' + (c[1] >> 4) + ',' + (c[2] >> 4);
-      colorMap[key] = (colorMap[key] || { count: 0, r: 0, g: 0, b: 0 });
-      colorMap[key].count++;
-      colorMap[key].r += c[0];
-      colorMap[key].g += c[1];
-      colorMap[key].b += c[2];
-      if (colorMap[key].count > bestCount) {
-        bestCount = colorMap[key].count;
-        bestKey = key;
-      }
-    }
+  async function autoRemoveBackground() {
+    if (aiLoading) return;
+    aiLoading = true;
 
-    if (!bestKey) return;
-    const bg = colorMap[bestKey];
-    const bgR = Math.round(bg.r / bg.count);
-    const bgG = Math.round(bg.g / bg.count);
-    const bgB = Math.round(bg.b / bg.count);
+    const btn = overlay.querySelector('.img-editor-auto-remove');
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="img-editor-spinner"></span>처리중...';
 
-    // Flood-fill from all edges
-    const visited = new Uint8Array(w * h);
-    const queue = [];
+    try {
+      const removeBg = await loadAIModule();
+      const dataUrl = editorCanvas.toDataURL('image/png');
+      const resp = await fetch(dataUrl);
+      const inputBlob = await resp.blob();
 
-    function colorDist(idx) {
-      if (data[idx + 3] < 10) return 0;
-      const dr = data[idx] - bgR;
-      const dg = data[idx + 1] - bgG;
-      const db = data[idx + 2] - bgB;
-      return Math.sqrt(dr * dr + dg * dg + db * db);
-    }
-
-    // Seed from edges
-    for (let x = 0; x < w; x++) {
-      if (colorDist(x * 4) <= tolerance) queue.push(x);
-      const bi = (h - 1) * w + x;
-      if (colorDist(bi * 4) <= tolerance) queue.push(bi);
-    }
-    for (let y = 1; y < h - 1; y++) {
-      const li = y * w;
-      if (colorDist(li * 4) <= tolerance) queue.push(li);
-      const ri = y * w + w - 1;
-      if (colorDist(ri * 4) <= tolerance) queue.push(ri);
-    }
-
-    for (let i = 0; i < queue.length; i++) visited[queue[i]] = 1;
-
-    // BFS flood fill
-    let head = 0;
-    while (head < queue.length) {
-      const pos = queue[head++];
-      const px = pos % w;
-      const py = (pos - px) / w;
-      const neighbors = [];
-      if (px > 0) neighbors.push(pos - 1);
-      if (px < w - 1) neighbors.push(pos + 1);
-      if (py > 0) neighbors.push(pos - w);
-      if (py < h - 1) neighbors.push(pos + w);
-
-      for (let n = 0; n < neighbors.length; n++) {
-        const np = neighbors[n];
-        if (visited[np]) continue;
-        visited[np] = 1;
-        if (colorDist(np * 4) <= tolerance) {
-          queue.push(np);
-        }
-      }
-    }
-
-    // Apply: make background pixels transparent, soften edges
-    for (let i = 0; i < queue.length; i++) {
-      const idx = queue[i] * 4;
-      data[idx + 3] = 0;
-    }
-
-    // Edge softening: partially transparent pixels near the boundary
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const pos = y * w + x;
-        if (visited[pos]) continue;
-        const idx = pos * 4;
-        if (data[idx + 3] === 0) continue;
-        // Check if adjacent to removed pixel
-        let adjRemoved = 0;
-        if (x > 0 && visited[pos - 1]) adjRemoved++;
-        if (x < w - 1 && visited[pos + 1]) adjRemoved++;
-        if (y > 0 && visited[pos - w]) adjRemoved++;
-        if (y < h - 1 && visited[pos + w]) adjRemoved++;
-        if (adjRemoved > 0) {
-          const dist = colorDist(idx);
-          if (dist < tolerance * 1.5) {
-            const alpha = Math.min(255, Math.round(255 * (dist / (tolerance * 1.5))));
-            data[idx + 3] = Math.min(data[idx + 3], alpha);
+      const resultBlob = await removeBg(inputBlob, {
+        model: 'isnet_quint8',
+        output: { format: 'image/png', type: 'foreground' },
+        progress: (key, current, total) => {
+          if (total > 0) {
+            const pct = Math.round((current / total) * 100);
+            btn.innerHTML = '<span class="img-editor-spinner"></span>' + pct + '%';
           }
-        }
-      }
-    }
+        },
+      });
 
-    editorCtx.putImageData(imageData, 0, 0);
-    pushHistory();
-    updateUndoBtn();
-    renderDisplay();
+      const resultImg = new Image();
+      resultImg.onload = () => {
+        editorCtx.clearRect(0, 0, imgWidth, imgHeight);
+        editorCtx.drawImage(resultImg, 0, 0, imgWidth, imgHeight);
+        pushHistory();
+        updateUndoBtn();
+        renderDisplay();
+        URL.revokeObjectURL(resultImg.src);
+      };
+      resultImg.src = URL.createObjectURL(resultBlob);
+    } catch (err) {
+      console.error('AI background removal failed:', err);
+      alert('배경 제거에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      aiLoading = false;
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
   }
 
   // --- Save / Close ---

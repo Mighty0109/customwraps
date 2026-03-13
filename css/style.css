@@ -1375,6 +1375,22 @@ h4 { font-size: 0.95rem; font-weight: 600; }
   min-height: 36px;
 }
 
+.img-editor-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .img-editor-brush-control {
   flex: 1;
   display: flex;

@@ -427,11 +427,29 @@ const App = (function () {
     wrap.className = 'controls-wrap';
     wrap.id = 'controls-wrap';
 
-    // Panel selection
+    // Panel selection header with reset button
+    const panelHeader = document.createElement('div');
+    panelHeader.className = 'control-section-header';
+
     const panelLabel = document.createElement('div');
     panelLabel.className = 'control-section-label';
     panelLabel.textContent = '표시 영역 (패널 선택)';
-    wrap.appendChild(panelLabel);
+    panelHeader.appendChild(panelLabel);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'btn-reset-inline';
+    resetBtn.textContent = '초기화';
+    resetBtn.addEventListener('click', () => {
+      const layer = CanvasEngine.getSelectedLayer();
+      if (layer) {
+        CanvasEngine.resetLayer(layer.id);
+        refreshControls();
+        refreshLayerList();
+      }
+    });
+    panelHeader.appendChild(resetBtn);
+
+    wrap.appendChild(panelHeader);
 
     const panelWrap = document.createElement('div');
     panelWrap.className = 'panel-selector';
@@ -501,20 +519,6 @@ const App = (function () {
     });
     controlRefs.offsetY = offYSlider;
     slidersWrap.appendChild(offYSlider.wrapper);
-
-    // Reset
-    const resetBtn = document.createElement('button');
-    resetBtn.className = 'btn btn-secondary btn-reset';
-    resetBtn.textContent = '레이어 초기화';
-    resetBtn.addEventListener('click', () => {
-      const layer = CanvasEngine.getSelectedLayer();
-      if (layer) {
-        CanvasEngine.resetLayer(layer.id);
-        refreshControls();
-        refreshLayerList();
-      }
-    });
-    slidersWrap.appendChild(resetBtn);
 
     wrap.appendChild(slidersWrap);
 

@@ -835,11 +835,34 @@ h4 { font-size: 0.95rem; font-weight: 600; }
    CONTROLS
    ============================================================ */
 
+.control-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
 .control-section-label {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+}
+
+.btn-reset-inline {
+  background: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-reset-inline:active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .control-slider {

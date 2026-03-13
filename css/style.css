@@ -415,7 +415,6 @@ h4 { font-size: 0.95rem; font-weight: 600; }
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding-bottom: var(--safe-bottom);
-  border-top: 1px solid var(--border-subtle);
 }
 
 .tab-panel {
@@ -473,6 +472,10 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 .has-image .drop-zone-text br { display: none; }
 
 .is-full .drop-zone {
+  display: none;
+}
+
+.is-full .drop-zone-hint {
   display: none;
 }
 

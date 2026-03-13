@@ -117,7 +117,7 @@ const UI = (function () {
           <path d="M8 28V38C8 39.1 8.9 40 10 40H38C39.1 40 40 39.1 40 38V28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <p class="drop-zone-text">이미지를 드래그하거나<br>탭하여 선택하세요</p>
-        <p class="drop-zone-hint">PNG, JPG, WebP (최대 5장)</p>
+        <p class="drop-zone-hint">PNG, JPG, WebP (최대 20장)</p>
       </div>
     `;
 

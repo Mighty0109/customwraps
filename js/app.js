@@ -334,6 +334,36 @@ var App = (function () {
       name.className = 'layer-name';
       name.textContent = layer.name;
 
+      var reorder = document.createElement('div');
+      reorder.className = 'layer-reorder';
+      var upBtn = document.createElement('button');
+      upBtn.className = 'btn-icon layer-reorder-btn';
+      upBtn.title = '\uc704\ub85c';
+      upBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 15L12 9L6 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      var downBtn = document.createElement('button');
+      downBtn.className = 'btn-icon layer-reorder-btn';
+      downBtn.title = '\uc544\ub798\ub85c';
+      downBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      // UI is rendered top=last, so up in UI = +1 in array, down in UI = -1
+      (function (lid, idx, len) {
+        if (idx >= len - 1) upBtn.disabled = true;
+        if (idx <= 0) downBtn.disabled = true;
+        upBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          CW.LayerStore.move(lid, 1);
+          refreshLayerList();
+          refreshControls();
+        });
+        downBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          CW.LayerStore.move(lid, -1);
+          refreshLayerList();
+          refreshControls();
+        });
+      })(layer.id, i, layers.length);
+      reorder.appendChild(upBtn);
+      reorder.appendChild(downBtn);
+
       var actions = document.createElement('div');
       actions.className = 'layer-actions';
 
@@ -364,6 +394,7 @@ var App = (function () {
       actions.appendChild(editBtn);
       actions.appendChild(delBtn);
 
+      item.appendChild(reorder);
       item.appendChild(visBtn);
       item.appendChild(thumb);
       item.appendChild(name);

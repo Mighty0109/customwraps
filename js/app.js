@@ -1,28 +1,36 @@
 /* ============================================================
-   app.js - Main App Orchestration, Routing, State
-   (Layer-based architecture)
+   app.js - Main App Orchestration, Routing, UI
    ============================================================ */
 
 'use strict';
 
-const App = (function () {
-  let currentModel = null;
-  let currentScreen = 'select';
-  let currentTab = 'upload';
+var App = (function () {
+  var currentModel = null;
+  var currentScreen = 'select';
+  var currentTab = 'upload';
 
-  const MAX_LAYERS = 5;
-
-  let controlRefs = {};
-  let layerListContainer = null;
-  let uploadZoneContainer = null;
-  let controlsContainer = null;
+  var controlRefs = {};
+  var layerListContainer = null;
+  var uploadZoneContainer = null;
+  var controlsContainer = null;
 
   function init() {
     renderModelSelection();
     setupEditorUI();
     setupExportButton();
     setupBeforeAfter();
+    setupEventListeners();
     showScreen('select');
+  }
+
+  // ========================
+  // Event Bus Listeners
+  // ========================
+
+  function setupEventListeners() {
+    CW.on('input:layerMoved', function (layer) {
+      syncControlsFromEngine(layer);
+    });
   }
 
   // ========================
@@ -34,7 +42,7 @@ const App = (function () {
     document.getElementById('screen-select').classList.toggle('hidden', screen !== 'select');
     document.getElementById('screen-editor').classList.toggle('hidden', screen !== 'editor');
     if (screen === 'editor') {
-      setTimeout(() => CanvasEngine.render(), 50);
+      setTimeout(function () { CW.Renderer.render(); }, 50);
     }
   }
 
@@ -43,25 +51,24 @@ const App = (function () {
   // ========================
 
   function renderModelSelection() {
-    const grid = document.getElementById('model-grid');
+    var grid = document.getElementById('model-grid');
     grid.innerHTML = '';
-    TeslaModels.forEach(model => {
-      const card = document.createElement('button');
+    TeslaModels.forEach(function (model) {
+      var card = document.createElement('button');
       card.className = 'model-card';
       card.setAttribute('aria-label', model.name + (model.subtitle ? ' ' + model.subtitle : ''));
-      const thumbUrl = getVehicleImagePath(model);
-      const fallbackSvg = generateThumbnailSVG(model);
-      card.innerHTML = `
-        <div class="model-card-thumb">
-          <img src="${thumbUrl}" alt="${model.name}" loading="lazy"
-               onerror="this.src='${fallbackSvg}'">
-        </div>
-        <div class="model-card-info">
-          <div class="model-card-name">${model.name}</div>
-          ${model.subtitle ? `<div class="model-card-subtitle">${model.subtitle}</div>` : ''}
-        </div>
-      `;
-      card.addEventListener('click', () => selectModel(model));
+      var thumbUrl = getVehicleImagePath(model);
+      var fallbackSvg = generateThumbnailSVG(model);
+      card.innerHTML =
+        '<div class="model-card-thumb">' +
+          '<img src="' + thumbUrl + '" alt="' + model.name + '" loading="lazy"' +
+          ' onerror="this.src=\'' + fallbackSvg + '\'">' +
+        '</div>' +
+        '<div class="model-card-info">' +
+          '<div class="model-card-name">' + model.name + '</div>' +
+          (model.subtitle ? '<div class="model-card-subtitle">' + model.subtitle + '</div>' : '') +
+        '</div>';
+      card.addEventListener('click', function () { selectModel(model); });
       grid.appendChild(card);
     });
   }
@@ -70,10 +77,11 @@ const App = (function () {
     currentModel = model;
     document.getElementById('editor-model-name').textContent =
       model.name + (model.subtitle ? ' ' + model.subtitle : '');
-    const canvasEl = document.getElementById('main-canvas');
-    CanvasEngine.init(canvasEl);
-    CanvasEngine.setTemplate(model);
-    CanvasEngine.clearLayers();
+    var canvasEl = document.getElementById('main-canvas');
+    CW.Renderer.init(canvasEl);
+    CW.CanvasInput.init(canvasEl);
+    CW.Renderer.setTemplate(model);
+    CW.LayerStore.clear();
     showTab('upload');
     showScreen('editor');
     refreshLayerList();
@@ -89,42 +97,36 @@ const App = (function () {
   // ========================
 
   function setupEditorUI() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => showTab(btn.dataset.tab));
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { showTab(btn.dataset.tab); });
     });
-    document.getElementById('btn-back').addEventListener('click', () => {
-      CanvasEngine.setShowPanelNumbers(false);
+    document.getElementById('btn-back').addEventListener('click', function () {
+      CW.PanelDetector.setShowNumbers(false);
       showScreen('select');
     });
 
-    // Containers
     layerListContainer = document.getElementById('layer-list-container');
     uploadZoneContainer = document.getElementById('upload-zone-container');
     controlsContainer = document.getElementById('controls-container');
 
-    // Drop zone
-    const zone = UI.createDropZone({ onFile: handleImageUpload, multiple: true });
+    var zone = UI.createDropZone({ onFile: handleImageUpload, multiple: true });
     uploadZoneContainer.appendChild(zone);
 
-    // Text layer input
     buildTextInput(uploadZoneContainer);
-
-    // Build controls (once)
     buildControls();
   }
 
   function showTab(tab) {
     currentTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
       btn.classList.toggle('active', btn.dataset.tab === tab);
     });
-    document.querySelectorAll('.tab-panel').forEach(panel => {
+    document.querySelectorAll('.tab-panel').forEach(function (panel) {
       panel.classList.toggle('hidden', panel.dataset.tab !== tab);
     });
 
-    // Toggle split mode: layers tab shows sidebar next to canvas
-    const canvasArea = document.querySelector('.canvas-area');
-    const layerSidebar = document.getElementById('layer-list-container');
+    var canvasArea = document.querySelector('.canvas-area');
+    var layerSidebar = document.getElementById('layer-list-container');
     if (tab === 'upload') {
       canvasArea.classList.add('split-mode');
       canvasArea.classList.remove('full-width-mode');
@@ -135,21 +137,20 @@ const App = (function () {
       layerSidebar.classList.add('hidden');
     }
 
-    // Only show panel numbers when controls tab is active and a layer is selected
     if (tab !== 'controls') {
-      CanvasEngine.setShowPanelNumbers(false);
-    } else if (CanvasEngine.getSelectedLayer()) {
-      CanvasEngine.setShowPanelNumbers(true);
+      CW.PanelDetector.setShowNumbers(false);
+    } else if (CW.LayerStore.getSelected()) {
+      CW.PanelDetector.setShowNumbers(true);
     }
 
-    CanvasEngine.render();
+    CW.Renderer.render();
   }
 
   // ========================
   // Text Layer
   // ========================
 
-  const TEXT_FONTS = [
+  var TEXT_FONTS = [
     { value: "'Noto Sans KR', sans-serif", label: 'Noto Sans KR' },
     { value: "'Noto Serif KR', serif", label: 'Noto Serif KR' },
     { value: "'Black Han Sans', sans-serif", label: 'Black Han Sans' },
@@ -158,36 +159,36 @@ const App = (function () {
   ];
 
   function buildTextInput(container) {
-    const wrap = document.createElement('div');
+    var wrap = document.createElement('div');
     wrap.className = 'text-input-section';
 
-    const label = document.createElement('div');
+    var label = document.createElement('div');
     label.className = 'control-section-label';
-    label.textContent = '텍스트 추가';
+    label.textContent = '\ud14d\uc2a4\ud2b8 \ucd94\uac00';
     wrap.appendChild(label);
 
-    const inputRow = document.createElement('div');
+    var inputRow = document.createElement('div');
     inputRow.className = 'text-input-row';
 
-    const textInput = document.createElement('input');
+    var textInput = document.createElement('input');
     textInput.type = 'text';
     textInput.className = 'text-layer-input';
-    textInput.placeholder = '텍스트 입력...';
+    textInput.placeholder = '\ud14d\uc2a4\ud2b8 \uc785\ub825...';
     inputRow.appendChild(textInput);
 
-    const addBtn = document.createElement('button');
+    var addBtn = document.createElement('button');
     addBtn.className = 'btn btn-primary btn-text-add';
-    addBtn.textContent = '추가';
+    addBtn.textContent = '\ucd94\uac00';
     inputRow.appendChild(addBtn);
     wrap.appendChild(inputRow);
 
-    const optionsRow = document.createElement('div');
+    var optionsRow = document.createElement('div');
     optionsRow.className = 'text-options-row';
 
-    const fontSelect = document.createElement('select');
+    var fontSelect = document.createElement('select');
     fontSelect.className = 'text-font-select';
-    TEXT_FONTS.forEach(f => {
-      const opt = document.createElement('option');
+    TEXT_FONTS.forEach(function (f) {
+      var opt = document.createElement('option');
       opt.value = f.value;
       opt.textContent = f.label;
       opt.style.fontFamily = f.value;
@@ -195,7 +196,7 @@ const App = (function () {
     });
     optionsRow.appendChild(fontSelect);
 
-    const colorInput = document.createElement('input');
+    var colorInput = document.createElement('input');
     colorInput.type = 'color';
     colorInput.className = 'text-color-input';
     colorInput.value = '#000000';
@@ -204,58 +205,55 @@ const App = (function () {
     wrap.appendChild(optionsRow);
     container.appendChild(wrap);
 
-    addBtn.addEventListener('click', () => {
-      const text = textInput.value.trim();
+    addBtn.addEventListener('click', function () {
+      var text = textInput.value.trim();
       if (!text) return;
       addTextLayer(text, fontSelect.value, colorInput.value);
       textInput.value = '';
     });
 
-    textInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        addBtn.click();
-      }
+    textInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') addBtn.click();
     });
   }
 
   function addTextLayer(text, fontFamily, color) {
-    if (CanvasEngine.getLayerCount() >= MAX_LAYERS) {
-      UI.showToast(`최대 ${MAX_LAYERS}개 레이어까지 추가할 수 있습니다.`);
+    if (CW.LayerStore.getCount() >= CW.LayerStore.getMaxLayers()) {
+      UI.showToast('\ucd5c\ub300 ' + CW.LayerStore.getMaxLayers() + '\uac1c \ub808\uc774\uc5b4\uae4c\uc9c0 \ucd94\uac00\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.');
       return;
     }
 
-    const size = 1024;
-    const canvas = document.createElement('canvas');
+    var size = 1024;
+    var canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext('2d');
+    var ctx = canvas.getContext('2d');
 
-    // Determine font size to fit width with padding
-    let fontSize = 120;
-    ctx.font = `bold ${fontSize}px ${fontFamily}`;
-    let measured = ctx.measureText(text);
+    var fontSize = 120;
+    ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
+    var measured = ctx.measureText(text);
     while (measured.width > size * 0.85 && fontSize > 20) {
       fontSize -= 4;
-      ctx.font = `bold ${fontSize}px ${fontFamily}`;
+      ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
       measured = ctx.measureText(text);
     }
 
     ctx.clearRect(0, 0, size, size);
     ctx.fillStyle = color;
-    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, size / 2, size / 2);
 
-    const img = new Image();
-    img.onload = () => {
-      const id = 'text_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-      CanvasEngine.addLayer(img, id, text);
-      CanvasEngine.setSelectedLayer(id);
+    var img = new Image();
+    img.onload = function () {
+      var id = 'text_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      CW.LayerStore.add(img, id, text);
+      CW.LayerStore.setSelected(id);
       refreshLayerList();
       refreshControls();
-      if (CanvasEngine.getLayerCount() === 1 && window.innerWidth < 1200) {
-        setTimeout(() => showTab('controls'), 300);
+      if (CW.LayerStore.getCount() === 1 && window.innerWidth < 1200) {
+        setTimeout(function () { showTab('controls'); }, 300);
       }
     };
     img.src = canvas.toDataURL('image/png');
@@ -266,19 +264,19 @@ const App = (function () {
   // ========================
 
   function handleImageUpload(fileInfo) {
-    if (CanvasEngine.getLayerCount() >= MAX_LAYERS) {
-      UI.showToast(`최대 ${MAX_LAYERS}개 레이어까지 추가할 수 있습니다.`);
+    if (CW.LayerStore.getCount() >= CW.LayerStore.getMaxLayers()) {
+      UI.showToast('\ucd5c\ub300 ' + CW.LayerStore.getMaxLayers() + '\uac1c \ub808\uc774\uc5b4\uae4c\uc9c0 \ucd94\uac00\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.');
       return;
     }
-    const id = Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    var id = Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     fileInfo.id = id;
-    CanvasEngine.addLayer(fileInfo.image, id, fileInfo.name);
-    CanvasEngine.setSelectedLayer(id);
+    CW.LayerStore.add(fileInfo.image, id, fileInfo.name);
+    CW.LayerStore.setSelected(id);
     refreshLayerList();
     refreshControls();
 
-    if (CanvasEngine.getLayerCount() === 1 && window.innerWidth < 1200) {
-      setTimeout(() => showTab('controls'), 300);
+    if (CW.LayerStore.getCount() === 1 && window.innerWidth < 1200) {
+      setTimeout(function () { showTab('controls'); }, 300);
     }
   }
 
@@ -288,76 +286,74 @@ const App = (function () {
 
   function refreshLayerList() {
     layerListContainer.innerHTML = '';
-    const layers = CanvasEngine.getLayers();
-    const selectedId = CanvasEngine.getSelectedLayerId();
+    var layers = CW.LayerStore.getAll();
+    var selectedId = CW.LayerStore.getSelectedId();
 
     if (layers.length === 0) {
-      const empty = document.createElement('div');
+      var empty = document.createElement('div');
       empty.className = 'layer-list-empty';
-      empty.textContent = '이미지를 업로드하여 레이어를 추가하세요';
+      empty.textContent = '\uc774\ubbf8\uc9c0\ub97c \uc5c5\ub85c\ub4dc\ud558\uc5ec \ub808\uc774\uc5b4\ub97c \ucd94\uac00\ud558\uc138\uc694';
       layerListContainer.appendChild(empty);
     }
 
-    // Render layers (top = last in array = front)
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const layer = layers[i];
-      const item = document.createElement('div');
+    for (var i = layers.length - 1; i >= 0; i--) {
+      var layer = layers[i];
+      var item = document.createElement('div');
       item.className = 'layer-item' + (layer.id === selectedId ? ' selected' : '') +
         (!layer.visible ? ' layer-hidden' : '');
 
-      // Visibility toggle
-      const visBtn = document.createElement('button');
+      var visBtn = document.createElement('button');
       visBtn.className = 'btn-icon layer-vis-btn';
       visBtn.innerHTML = layer.visible
-        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>`
-        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
-      visBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        CanvasEngine.updateLayer(layer.id, { visible: !layer.visible });
-        refreshLayerList();
-      });
+        ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      (function (lid, vis) {
+        visBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          CW.LayerStore.update(lid, { visible: !vis });
+          refreshLayerList();
+        });
+      })(layer.id, layer.visible);
 
-      // Thumbnail
-      const thumb = document.createElement('div');
+      var thumb = document.createElement('div');
       thumb.className = 'layer-thumb';
-      if (layer.backgroundColor) {
-        thumb.style.backgroundColor = layer.backgroundColor;
-      }
       if (layer.image) {
-        const img = document.createElement('img');
+        var img = document.createElement('img');
         img.src = layer.image.src;
         img.alt = layer.name;
         thumb.appendChild(img);
       }
 
-      // Name
-      const name = document.createElement('div');
+      var name = document.createElement('div');
       name.className = 'layer-name';
       name.textContent = layer.name;
 
-      // Actions
-      const actions = document.createElement('div');
+      var actions = document.createElement('div');
       actions.className = 'layer-actions';
 
-      const editBtn = document.createElement('button');
+      var editBtn = document.createElement('button');
       editBtn.className = 'btn-icon layer-action-btn';
-      editBtn.title = '배경 지우기';
-      editBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M14.85 2.85a1.5 1.5 0 012.1 2.1L6.5 15.4l-3.5 1 1-3.5L14.85 2.85z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-      editBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openImageEditor(layer);
-      });
+      editBtn.title = '\ubc30\uacbd \uc9c0\uc6b0\uae30';
+      editBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M14.85 2.85a1.5 1.5 0 012.1 2.1L6.5 15.4l-3.5 1 1-3.5L14.85 2.85z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      (function (l) {
+        editBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openImageEditor(l);
+        });
+      })(layer);
 
-      const delBtn = document.createElement('button');
+      var delBtn = document.createElement('button');
       delBtn.className = 'btn-icon layer-action-btn layer-del-btn';
-      delBtn.title = '레이어 삭제';
-      delBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
-      delBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        CanvasEngine.removeLayer(layer.id);
-        refreshLayerList();
-        refreshControls();
-      });
+      delBtn.title = '\ub808\uc774\uc5b4 \uc0ad\uc81c';
+      delBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      (function (lid) {
+        delBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          CW.LayerStore.remove(lid);
+          refreshLayerList();
+          refreshControls();
+        });
+      })(layer.id);
 
       actions.appendChild(editBtn);
       actions.appendChild(delBtn);
@@ -367,37 +363,37 @@ const App = (function () {
       item.appendChild(name);
       item.appendChild(actions);
 
-      // Select on click
-      item.addEventListener('click', () => {
-        CanvasEngine.setSelectedLayer(layer.id);
-        refreshLayerList();
-        refreshControls();
-      });
+      (function (lid) {
+        item.addEventListener('click', function () {
+          CW.LayerStore.setSelected(lid);
+          refreshLayerList();
+          refreshControls();
+        });
+      })(layer.id);
 
       layerListContainer.appendChild(item);
     }
 
-    // Clear all button
     if (layers.length >= 2) {
-      const clearBtn = document.createElement('button');
+      var clearBtn = document.createElement('button');
       clearBtn.className = 'btn btn-secondary btn-sm layer-clear-all';
-      clearBtn.textContent = '전체 삭제';
-      clearBtn.addEventListener('click', () => {
-        CanvasEngine.clearLayers();
+      clearBtn.textContent = '\uc804\uccb4 \uc0ad\uc81c';
+      clearBtn.addEventListener('click', function () {
+        CW.LayerStore.clear();
         refreshLayerList();
         refreshControls();
       });
       layerListContainer.appendChild(clearBtn);
     }
 
-    // Show/hide drop zone
-    uploadZoneContainer.classList.toggle('is-full', layers.length >= MAX_LAYERS);
+    var maxLayers = CW.LayerStore.getMaxLayers();
+    uploadZoneContainer.classList.toggle('is-full', layers.length >= maxLayers);
     uploadZoneContainer.classList.toggle('has-image', layers.length > 0);
   }
 
   function openImageEditor(layer) {
-    ImageEditor.open(layer.image, (newImage) => {
-      CanvasEngine.updateLayerImage(layer.id, newImage);
+    ImageEditor.open(layer.image, function (newImage) {
+      CW.LayerStore.updateImage(layer.id, newImage);
       refreshLayerList();
     });
   }
@@ -409,139 +405,130 @@ const App = (function () {
   function buildControls() {
     controlsContainer.innerHTML = '';
 
-    // Empty state message
-    const emptyMsg = document.createElement('div');
+    var emptyMsg = document.createElement('div');
     emptyMsg.className = 'controls-empty';
     emptyMsg.id = 'controls-empty';
-    emptyMsg.textContent = '레이어를 선택하세요';
+    emptyMsg.textContent = '\ub808\uc774\uc5b4\ub97c \uc120\ud0dd\ud558\uc138\uc694';
     controlsContainer.appendChild(emptyMsg);
 
-    // Controls wrapper (hidden when no selection)
-    const wrap = document.createElement('div');
+    var wrap = document.createElement('div');
     wrap.className = 'controls-wrap';
     wrap.id = 'controls-wrap';
 
-    // Panel selection header with reset button
-    const panelHeader = document.createElement('div');
+    // Panel header with reset
+    var panelHeader = document.createElement('div');
     panelHeader.className = 'control-section-header';
 
-    const panelLabel = document.createElement('div');
+    var panelLabel = document.createElement('div');
     panelLabel.className = 'control-section-label';
-    panelLabel.textContent = '표시 영역 (패널 선택)';
+    panelLabel.textContent = '\ud45c\uc2dc \uc601\uc5ed (\ud328\ub110 \uc120\ud0dd)';
     panelHeader.appendChild(panelLabel);
 
-    const resetBtn = document.createElement('button');
+    var resetBtn = document.createElement('button');
     resetBtn.className = 'btn-reset-inline';
-    resetBtn.textContent = '초기화';
-    resetBtn.addEventListener('click', () => {
-      const layer = CanvasEngine.getSelectedLayer();
+    resetBtn.textContent = '\ucd08\uae30\ud654';
+    resetBtn.addEventListener('click', function () {
+      var layer = CW.LayerStore.getSelected();
       if (layer) {
-        CanvasEngine.resetLayer(layer.id);
+        CW.LayerStore.reset(layer.id);
         refreshControls();
         refreshLayerList();
       }
     });
     panelHeader.appendChild(resetBtn);
-
     wrap.appendChild(panelHeader);
 
-    const panelWrap = document.createElement('div');
+    var panelWrap = document.createElement('div');
     panelWrap.className = 'panel-selector';
     panelWrap.id = 'panel-selector';
     wrap.appendChild(panelWrap);
 
     controlRefs.panelSelector = {
       container: panelWrap,
-      rebuild: () => buildPanelSelector(panelWrap),
+      rebuild: function () { buildPanelSelector(panelWrap); },
     };
 
     buildPanelSelector(panelWrap);
 
-    // Sliders toggle button
-    const toggleBtn = document.createElement('button');
+    // Toggle button
+    var toggleBtn = document.createElement('button');
     toggleBtn.className = 'btn btn-secondary btn-toggle-sliders';
     toggleBtn.id = 'btn-toggle-sliders';
-    toggleBtn.textContent = '컨트롤 슬라이더 펼치기';
+    toggleBtn.textContent = '\ucee8\ud2b8\ub864 \uc2ac\ub77c\uc774\ub354 \ud3bc\uce58\uae30';
     wrap.appendChild(toggleBtn);
 
-    // Sliders container (collapsible)
-    const slidersWrap = document.createElement('div');
+    // Collapsible sliders
+    var slidersWrap = document.createElement('div');
     slidersWrap.className = 'sliders-collapsible collapsed';
     slidersWrap.id = 'sliders-collapsible';
 
-    // Scale
-    const scaleSlider = UI.createSlider({
-      id: 'ctrl-scale', label: '크기 (Scale)',
+    var scaleSlider = UI.createSlider({
+      id: 'ctrl-scale', label: '\ud06c\uae30 (Scale)',
       min: 10, max: 500, step: 1, value: 100, unit: '%',
-      onChange: (v) => updateSelectedLayer({ scale: v / 100 }),
+      onChange: function (v) { updateSelectedLayer({ scale: v / 100 }); },
     });
     controlRefs.scale = scaleSlider;
     slidersWrap.appendChild(scaleSlider.wrapper);
 
-    // Rotation
-    const rotSlider = UI.createSlider({
-      id: 'ctrl-rotation', label: '회전 (Rotation)',
+    var rotSlider = UI.createSlider({
+      id: 'ctrl-rotation', label: '\ud68c\uc804 (Rotation)',
       min: 0, max: 360, step: 1, value: 0, unit: '\u00B0',
-      onChange: (v) => updateSelectedLayer({ rotation: v }),
+      onChange: function (v) { updateSelectedLayer({ rotation: v }); },
     });
     controlRefs.rotation = rotSlider;
     slidersWrap.appendChild(rotSlider.wrapper);
 
-    // Opacity
-    const opacSlider = UI.createSlider({
-      id: 'ctrl-opacity', label: '투명도 (Opacity)',
+    var opacSlider = UI.createSlider({
+      id: 'ctrl-opacity', label: '\ud22c\uba85\ub3c4 (Opacity)',
       min: 0, max: 100, step: 1, value: 100, unit: '%',
-      onChange: (v) => updateSelectedLayer({ opacity: v / 100 }),
+      onChange: function (v) { updateSelectedLayer({ opacity: v / 100 }); },
     });
     controlRefs.opacity = opacSlider;
     slidersWrap.appendChild(opacSlider.wrapper);
 
-    // Offset X
-    const offXSlider = UI.createSlider({
-      id: 'ctrl-offset-x', label: 'X 오프셋',
+    var offXSlider = UI.createSlider({
+      id: 'ctrl-offset-x', label: 'X \uc624\ud504\uc14b',
       min: -512, max: 512, step: 1, value: 0, unit: 'px',
-      onChange: (v) => updateSelectedLayer({ offsetX: v }),
+      onChange: function (v) { updateSelectedLayer({ offsetX: v }); },
     });
     controlRefs.offsetX = offXSlider;
     slidersWrap.appendChild(offXSlider.wrapper);
 
-    // Offset Y
-    const offYSlider = UI.createSlider({
-      id: 'ctrl-offset-y', label: 'Y 오프셋',
+    var offYSlider = UI.createSlider({
+      id: 'ctrl-offset-y', label: 'Y \uc624\ud504\uc14b',
       min: -512, max: 512, step: 1, value: 0, unit: 'px',
-      onChange: (v) => updateSelectedLayer({ offsetY: v }),
+      onChange: function (v) { updateSelectedLayer({ offsetY: v }); },
     });
     controlRefs.offsetY = offYSlider;
     slidersWrap.appendChild(offYSlider.wrapper);
 
     wrap.appendChild(slidersWrap);
 
-    // Toggle event
-    toggleBtn.addEventListener('click', () => {
-      const collapsed = slidersWrap.classList.toggle('collapsed');
-      toggleBtn.textContent = collapsed ? '컨트롤 슬라이더 펼치기' : '컨트롤 슬라이더 접기';
+    toggleBtn.addEventListener('click', function () {
+      var collapsed = slidersWrap.classList.toggle('collapsed');
+      toggleBtn.textContent = collapsed ? '\ucee8\ud2b8\ub864 \uc2ac\ub77c\uc774\ub354 \ud3bc\uce58\uae30' : '\ucee8\ud2b8\ub864 \uc2ac\ub77c\uc774\ub354 \uc811\uae30';
     });
 
     controlsContainer.appendChild(wrap);
   }
 
   function updateSelectedLayer(props) {
-    const layer = CanvasEngine.getSelectedLayer();
+    var layer = CW.LayerStore.getSelected();
     if (!layer) return;
-    CanvasEngine.updateLayer(layer.id, props);
+    CW.LayerStore.update(layer.id, props);
     refreshLayerList();
   }
 
   function refreshControls() {
-    const layer = CanvasEngine.getSelectedLayer();
-    const emptyEl = document.getElementById('controls-empty');
-    const wrapEl = document.getElementById('controls-wrap');
+    var layer = CW.LayerStore.getSelected();
+    var emptyEl = document.getElementById('controls-empty');
+    var wrapEl = document.getElementById('controls-wrap');
     if (!emptyEl || !wrapEl) return;
 
     if (!layer) {
       emptyEl.classList.remove('hidden');
       wrapEl.classList.add('hidden');
-      CanvasEngine.setShowPanelNumbers(false);
+      CW.PanelDetector.setShowNumbers(false);
       return;
     }
 
@@ -550,26 +537,25 @@ const App = (function () {
     syncControlsFromEngine(layer);
   }
 
-  let panelSelectorInitialized = false;
+  var panelSelectorInitialized = false;
 
   function buildPanelSelector(container) {
-    const count = CanvasEngine.getPanelCount();
-    const layer = CanvasEngine.getSelectedLayer();
-    const selected = layer ? layer.selectedPanels : null;
+    var count = CW.PanelDetector.getCount();
+    var layer = CW.LayerStore.getSelected();
+    var selected = layer ? layer.selectedPanels : null;
 
-    // Only rebuild DOM if panel count changed
-    const currentCount = container.querySelectorAll('.panel-check').length;
+    var currentCount = container.querySelectorAll('.panel-check').length;
     if (currentCount !== count || !currentModel) {
       container.innerHTML = '';
       if (!currentModel || count === 0) return;
 
-      for (let i = 0; i < count; i++) {
-        const label = document.createElement('label');
+      for (var i = 0; i < count; i++) {
+        var label = document.createElement('label');
         label.className = 'panel-check';
-        const cb = document.createElement('input');
+        var cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.dataset.idx = i;
-        const span = document.createElement('span');
+        var span = document.createElement('span');
         span.textContent = (i + 1);
         label.appendChild(cb);
         label.appendChild(span);
@@ -577,25 +563,23 @@ const App = (function () {
       }
     }
 
-    // Update checked state without rebuilding DOM
-    container.querySelectorAll('.panel-check').forEach(l => {
-      const cb = l.querySelector('input');
-      const idx = parseInt(cb.dataset.idx);
-      const isChecked = selected && selected.includes(idx);
+    container.querySelectorAll('.panel-check').forEach(function (l) {
+      var cb = l.querySelector('input');
+      var idx = parseInt(cb.dataset.idx);
+      var isChecked = selected && selected.includes(idx);
       cb.checked = isChecked;
       l.classList.toggle('checked', isChecked);
     });
 
-    CanvasEngine.setShowPanelNumbers(true);
+    CW.PanelDetector.setShowNumbers(true);
 
-    // Attach listener only once
     if (!panelSelectorInitialized) {
       panelSelectorInitialized = true;
-      container.addEventListener('change', () => {
-        const checked = container.querySelectorAll('input[type="checkbox"]:checked');
-        const indices = Array.from(checked).map(cb => parseInt(cb.dataset.idx));
-        container.querySelectorAll('.panel-check').forEach(l => {
-          const cb = l.querySelector('input');
+      container.addEventListener('change', function () {
+        var checked = container.querySelectorAll('input[type="checkbox"]:checked');
+        var indices = Array.from(checked).map(function (cb) { return parseInt(cb.dataset.idx); });
+        container.querySelectorAll('.panel-check').forEach(function (l) {
+          var cb = l.querySelector('input');
           l.classList.toggle('checked', cb.checked);
         });
         updateSelectedLayer({ selectedPanels: indices.length > 0 ? indices : null });
@@ -610,43 +594,36 @@ const App = (function () {
     if (controlRefs.opacity) controlRefs.opacity.updateValue(Math.round(layer.opacity * 100));
     if (controlRefs.offsetX) controlRefs.offsetX.updateValue(Math.round(layer.offsetX));
     if (controlRefs.offsetY) controlRefs.offsetY.updateValue(Math.round(layer.offsetY));
-
     if (controlRefs.panelSelector) controlRefs.panelSelector.rebuild();
   }
-
-  // ========================
-  // Settings Tab
-  // ========================
-
-  // (HTML content, no JS needed)
 
   // ========================
   // Before/After
   // ========================
 
   function setupBeforeAfter() {
-    const btn = document.getElementById('btn-before-after');
+    var btn = document.getElementById('btn-before-after');
     if (!btn) return;
-    const canvas = document.getElementById('main-canvas');
+    var canvas = document.getElementById('main-canvas');
 
     btn.addEventListener('mousedown', showTemplate);
-    btn.addEventListener('touchstart', (e) => { e.preventDefault(); showTemplate(); });
+    btn.addEventListener('touchstart', function (e) { e.preventDefault(); showTemplate(); });
     btn.addEventListener('mouseup', restoreImage);
     btn.addEventListener('mouseleave', restoreImage);
-    btn.addEventListener('touchend', (e) => { e.preventDefault(); restoreImage(); });
+    btn.addEventListener('touchend', function (e) { e.preventDefault(); restoreImage(); });
     btn.addEventListener('touchcancel', restoreImage);
 
     function showTemplate() {
-      if (!CanvasEngine.hasLayers()) return;
+      if (!CW.LayerStore.hasLayers()) return;
       btn.classList.add('active');
-      const ctx = canvas.getContext('2d');
-      const cssW = parseInt(canvas.style.width) || canvas.width;
-      const cssH = parseInt(canvas.style.height) || canvas.height;
-      const dataUrl = CanvasEngine.getTemplateOnlyDataURL(cssW);
-      const img = new Image();
-      img.onload = () => {
+      var ctx = canvas.getContext('2d');
+      var cssW = parseInt(canvas.style.width) || canvas.width;
+      var cssH = parseInt(canvas.style.height) || canvas.height;
+      var dataUrl = CW.Export.getTemplateOnlyDataURL(cssW);
+      var img = new Image();
+      img.onload = function () {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const dpr = window.devicePixelRatio || 1;
+        var dpr = window.devicePixelRatio || 1;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.drawImage(img, 0, 0, cssW, cssH);
       };
@@ -655,7 +632,7 @@ const App = (function () {
 
     function restoreImage() {
       btn.classList.remove('active');
-      CanvasEngine.render();
+      CW.Renderer.render();
     }
   }
 
@@ -668,118 +645,117 @@ const App = (function () {
   }
 
   function openExportSheet() {
-    if (!CanvasEngine.hasLayers()) {
-      UI.showToast('먼저 이미지를 업로드해 주세요.');
+    if (!CW.LayerStore.hasLayers()) {
+      UI.showToast('\uba3c\uc800 \uc774\ubbf8\uc9c0\ub97c \uc5c5\ub85c\ub4dc\ud574 \uc8fc\uc138\uc694.');
       return;
     }
 
-    const content = document.createElement('div');
+    var content = document.createElement('div');
     content.className = 'export-content';
-    const previewSize = 256;
-    const previewUrl = CanvasEngine.getPreviewDataURL(previewSize);
-    content.innerHTML = `
-      <h3 class="export-title">내보내기</h3>
-      <div class="export-preview">
-        <img src="${previewUrl}" alt="미리보기" width="${previewSize}" height="${previewSize}">
-      </div>
-      <div class="export-field">
-        <label for="export-resolution">해상도</label>
-        <div class="export-resolution-btns">
-          <button class="btn btn-sm res-btn" data-res="512">512px</button>
-          <button class="btn btn-sm res-btn active" data-res="768">768px</button>
-          <button class="btn btn-sm res-btn" data-res="1024">1024px</button>
-        </div>
-      </div>
-      <div class="export-field">
-        <label for="export-filename">파일 이름</label>
-        <div class="export-filename-wrap">
-          <input type="text" id="export-filename" value="my_wrap" maxlength="30"
-                 pattern="[a-zA-Z0-9_-]+" placeholder="영문, 숫자, _, -">
-          <span class="export-filename-ext">.png</span>
-        </div>
-      </div>
-      <button class="btn btn-primary btn-download" id="btn-download">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M3 15V16C3 16.55 3.45 17 4 17H16C16.55 17 17 16.55 17 16V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        다운로드
-      </button>
-      <div class="export-size-warning hidden" id="export-size-warning"></div>
-      <div class="export-usb-info">
-        <h4>USB 설정 안내</h4>
-        <ol>
-          <li>USB를 FAT32 또는 exFAT로 포맷합니다.</li>
-          <li>루트에 <code>/Wraps/</code> 폴더를 만듭니다.</li>
-          <li>PNG 파일을 <code>/Wraps/</code> 안에 복사합니다.</li>
-          <li>Tesla에서 <strong>Toybox > Paint Shop</strong>을 엽니다.</li>
-        </ol>
-      </div>
-    `;
+    var previewSize = 256;
+    var previewUrl = CW.Export.getPreviewDataURL(previewSize);
+    content.innerHTML =
+      '<h3 class="export-title">\ub0b4\ubcf4\ub0b4\uae30</h3>' +
+      '<div class="export-preview">' +
+        '<img src="' + previewUrl + '" alt="\ubbf8\ub9ac\ubcf4\uae30" width="' + previewSize + '" height="' + previewSize + '">' +
+      '</div>' +
+      '<div class="export-field">' +
+        '<label for="export-resolution">\ud574\uc0c1\ub3c4</label>' +
+        '<div class="export-resolution-btns">' +
+          '<button class="btn btn-sm res-btn" data-res="512">512px</button>' +
+          '<button class="btn btn-sm res-btn active" data-res="768">768px</button>' +
+          '<button class="btn btn-sm res-btn" data-res="1024">1024px</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="export-field">' +
+        '<label for="export-filename">\ud30c\uc77c \uc774\ub984</label>' +
+        '<div class="export-filename-wrap">' +
+          '<input type="text" id="export-filename" value="my_wrap" maxlength="30" pattern="[a-zA-Z0-9_-]+" placeholder="\uc601\ubb38, \uc22b\uc790, _, -">' +
+          '<span class="export-filename-ext">.png</span>' +
+        '</div>' +
+      '</div>' +
+      '<button class="btn btn-primary btn-download" id="btn-download">' +
+        '<svg width="20" height="20" viewBox="0 0 20 20" fill="none">' +
+          '<path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '<path d="M3 15V16C3 16.55 3.45 17 4 17H16C16.55 17 17 16.55 17 16V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg>' +
+        '\ub2e4\uc6b4\ub85c\ub4dc' +
+      '</button>' +
+      '<div class="export-size-warning hidden" id="export-size-warning"></div>' +
+      '<div class="export-usb-info">' +
+        '<h4>USB \uc124\uc815 \uc548\ub0b4</h4>' +
+        '<ol>' +
+          '<li>USB\ub97c FAT32 \ub610\ub294 exFAT\uc73c\ub85c \ud3ec\ub9f7\ud569\ub2c8\ub2e4.</li>' +
+          '<li>\ub8e8\ud2b8\uc5d0 <code>/Wraps/</code> \ud3f4\ub354\ub97c \ub9cc\ub4ed\ub2c8\ub2e4.</li>' +
+          '<li>PNG \ud30c\uc77c\uc744 <code>/Wraps/</code> \uc548\uc5d0 \ubcf5\uc0ac\ud569\ub2c8\ub2e4.</li>' +
+          '<li>Tesla\uc5d0\uc11c <strong>Toybox > Paint Shop</strong>\uc744 \uc5fd\ub2c8\ub2e4.</li>' +
+        '</ol>' +
+      '</div>';
 
-    const sheet = UI.createBottomSheet(content);
+    var sheet = UI.createBottomSheet(content);
 
-    let selectedRes = 768;
-    content.querySelectorAll('.res-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        content.querySelectorAll('.res-btn').forEach(b => b.classList.remove('active'));
+    var selectedRes = 768;
+    content.querySelectorAll('.res-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        content.querySelectorAll('.res-btn').forEach(function (b) { b.classList.remove('active'); });
         btn.classList.add('active');
         selectedRes = parseInt(btn.dataset.res);
       });
     });
 
-    const filenameInput = content.querySelector('#export-filename');
-    filenameInput.addEventListener('input', () => {
+    var filenameInput = content.querySelector('#export-filename');
+    filenameInput.addEventListener('input', function () {
       filenameInput.value = filenameInput.value.replace(/[^a-zA-Z0-9_-]/g, '');
     });
 
-    content.querySelector('#btn-download').addEventListener('click', async () => {
-      const filename = filenameInput.value.trim() || 'my_wrap';
-      const downloadBtn = content.querySelector('#btn-download');
-      const warningEl = content.querySelector('#export-size-warning');
+    content.querySelector('#btn-download').addEventListener('click', function () {
+      var filename = filenameInput.value.trim() || 'my_wrap';
+      var downloadBtn = content.querySelector('#btn-download');
+      var warningEl = content.querySelector('#export-size-warning');
       downloadBtn.disabled = true;
-      downloadBtn.textContent = '생성 중...';
+      downloadBtn.textContent = '\uc0dd\uc131 \uc911...';
 
-      try {
-        let blob = await CanvasEngine.exportPNG(selectedRes);
+      CW.Export.toPNG(selectedRes).then(function (blob) {
         if (blob.size > 1048576) {
-          const lowerRes = selectedRes === 1024 ? 768 : 512;
-          warningEl.textContent = `파일 크기가 ${UI.formatFileSize(blob.size)}입니다. ${lowerRes}px로 축소합니다.`;
+          var lowerRes = selectedRes === 1024 ? 768 : 512;
+          warningEl.textContent = '\ud30c\uc77c \ud06c\uae30\uac00 ' + UI.formatFileSize(blob.size) + '\uc785\ub2c8\ub2e4. ' + lowerRes + 'px\ub85c \ucd95\uc18c\ud569\ub2c8\ub2e4.';
           warningEl.classList.remove('hidden');
-          blob = await CanvasEngine.exportPNG(lowerRes);
+          return CW.Export.toPNG(lowerRes);
         }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        return blob;
+      }).then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
         a.href = url;
         a.download = filename + '.png';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        UI.showToast('다운로드가 시작되었습니다!');
-        setTimeout(() => UI.closeBottomSheet(sheet), 500);
-      } catch (err) {
-        UI.showToast('내보내기 중 오류가 발생했습니다.');
+        UI.showToast('\ub2e4\uc6b4\ub85c\ub4dc\uac00 \uc2dc\uc791\ub418\uc5c8\uc2b5\ub2c8\ub2e4!');
+        setTimeout(function () { UI.closeBottomSheet(sheet); }, 500);
+      }).catch(function (err) {
+        UI.showToast('\ub0b4\ubcf4\ub0b4\uae30 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4.');
         console.error(err);
-      } finally {
+      }).finally(function () {
         downloadBtn.disabled = false;
-        downloadBtn.innerHTML = `
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M3 15V16C3 16.55 3.45 17 4 17H16C16.55 17 17 16.55 17 16V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          다운로드`;
-      }
+        downloadBtn.innerHTML =
+          '<svg width="20" height="20" viewBox="0 0 20 20" fill="none">' +
+            '<path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+            '<path d="M3 15V16C3 16.55 3.45 17 4 17H16C16.55 17 17 16.55 17 16V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '</svg>' +
+          '\ub2e4\uc6b4\ub85c\ub4dc';
+      });
     });
   }
 
   return {
-    init,
-    getCurrentModel,
-    syncControlsFromEngine,
+    init: init,
+    getCurrentModel: getCurrentModel,
+    syncControlsFromEngine: syncControlsFromEngine,
   };
 })();
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function () {
   App.init();
 });

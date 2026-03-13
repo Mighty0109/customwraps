@@ -258,9 +258,6 @@ var App = (function () {
       CW.LayerStore.setSelected(id);
       refreshLayerList();
       refreshControls();
-      if (CW.LayerStore.getCount() === 1 && window.innerWidth < 1200) {
-        setTimeout(function () { showTab('controls'); }, 300);
-      }
     };
     img.src = canvas.toDataURL('image/png');
   }
@@ -281,9 +278,6 @@ var App = (function () {
     refreshLayerList();
     refreshControls();
 
-    if (CW.LayerStore.getCount() === 1 && window.innerWidth < 1200) {
-      setTimeout(function () { showTab('controls'); }, 300);
-    }
   }
 
   // ========================

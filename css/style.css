@@ -502,11 +502,12 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 
 .canvas-area.split-mode {
   justify-content: flex-start !important;
-  align-items: flex-start !important;
+  align-items: stretch !important;
   flex-direction: row !important;
   gap: 0;
-  max-height: none;
+  max-height: 40dvh;
   padding-bottom: 0;
+  overflow: hidden;
 }
 
 .canvas-area.split-mode .canvas-wrapper {
@@ -524,6 +525,7 @@ h4 { font-size: 0.95rem; font-weight: 600; }
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-default);
   min-width: 0;
+  min-height: 0;
 }
 
 .layer-sidebar.hidden {

@@ -478,12 +478,9 @@ h4 { font-size: 0.95rem; font-weight: 600; }
    LAYER SIDEBAR (in canvas area)
    ============================================================ */
 
-.canvas-area {
-  transition: none;
-}
-
 .canvas-area.split-mode {
-  display: flex;
+  justify-content: flex-start !important;
+  flex-direction: row !important;
   gap: 0;
 }
 
@@ -498,10 +495,11 @@ h4 { font-size: 0.95rem; font-weight: 600; }
   padding: 8px;
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-default);
+  min-width: 0;
 }
 
 .layer-sidebar.hidden {
-  display: none;
+  display: none !important;
 }
 
 /* ============================================================

@@ -4,11 +4,11 @@
 
 /* ---- Design Tokens ---- */
 :root {
-  --bg-primary: #0A0A0E;
-  --bg-secondary: #12121A;
-  --bg-tertiary: #191924;
-  --bg-elevated: #21212E;
-  --bg-glass: rgba(18, 18, 26, 0.75);
+  --bg-primary: #0E0E0E;
+  --bg-secondary: #161616;
+  --bg-tertiary: #1C1C1C;
+  --bg-elevated: #252525;
+  --bg-glass: rgba(22, 22, 22, 0.75);
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-default: rgba(255, 255, 255, 0.12);
   --text-primary: #F8F9FA;

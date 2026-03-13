@@ -109,36 +109,8 @@ const App = (function () {
     // Text layer input
     buildTextInput(uploadZoneContainer);
 
-    // Layers preview canvas sync
-    setupLayersPreview();
-
     // Build controls (once)
     buildControls();
-  }
-
-  function setupLayersPreview() {
-    const previewCanvas = document.getElementById('layers-preview-canvas');
-    if (!previewCanvas) return;
-    const previewCtx = previewCanvas.getContext('2d');
-
-    // Observe main canvas changes via render hook
-    const origRender = CanvasEngine.render;
-    CanvasEngine.render = function () {
-      origRender.call(CanvasEngine);
-      updateLayersPreview();
-    };
-
-    function updateLayersPreview() {
-      const dataUrl = CanvasEngine.getPreviewDataURL(300);
-      const img = new Image();
-      img.onload = () => {
-        previewCanvas.width = img.width;
-        previewCanvas.height = img.height;
-        previewCtx.clearRect(0, 0, img.width, img.height);
-        previewCtx.drawImage(img, 0, 0);
-      };
-      img.src = dataUrl;
-    }
   }
 
   function showTab(tab) {
@@ -149,12 +121,26 @@ const App = (function () {
     document.querySelectorAll('.tab-panel').forEach(panel => {
       panel.classList.toggle('hidden', panel.dataset.tab !== tab);
     });
+
+    // Toggle split mode: layers tab shows sidebar next to canvas
+    const canvasArea = document.querySelector('.canvas-area');
+    const layerSidebar = document.getElementById('layer-list-container');
+    if (tab === 'upload') {
+      canvasArea.classList.add('split-mode');
+      layerSidebar.classList.remove('hidden');
+    } else {
+      canvasArea.classList.remove('split-mode');
+      layerSidebar.classList.add('hidden');
+    }
+
     // Only show panel numbers when controls tab is active and a layer is selected
     if (tab !== 'controls') {
       CanvasEngine.setShowPanelNumbers(false);
     } else if (CanvasEngine.getSelectedLayer()) {
       CanvasEngine.setShowPanelNumbers(true);
     }
+
+    CanvasEngine.render();
   }
 
   // ========================

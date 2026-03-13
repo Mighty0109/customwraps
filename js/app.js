@@ -127,9 +127,11 @@ const App = (function () {
     const layerSidebar = document.getElementById('layer-list-container');
     if (tab === 'upload') {
       canvasArea.classList.add('split-mode');
+      canvasArea.classList.remove('full-width-mode');
       layerSidebar.classList.remove('hidden');
     } else {
       canvasArea.classList.remove('split-mode');
+      canvasArea.classList.add('full-width-mode');
       layerSidebar.classList.add('hidden');
     }
 

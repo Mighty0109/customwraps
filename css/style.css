@@ -480,6 +480,22 @@ h4 { font-size: 0.95rem; font-weight: 600; }
    LAYER SIDEBAR (in canvas area)
    ============================================================ */
 
+.canvas-area.full-width-mode {
+  max-height: none;
+  height: auto;
+  padding: 0;
+}
+
+.canvas-area.full-width-mode .canvas-wrapper {
+  width: 100%;
+}
+
+.canvas-area.full-width-mode #main-canvas {
+  width: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
 .canvas-area.split-mode {
   justify-content: flex-start !important;
   align-items: flex-start !important;

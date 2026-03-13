@@ -129,7 +129,7 @@ var App = (function () {
     var layerSidebar = document.getElementById('layer-list-container');
     var beforeAfterBtn = document.getElementById('btn-before-after');
     if (beforeAfterBtn) {
-      beforeAfterBtn.classList.toggle('hidden', tab !== 'upload');
+      beforeAfterBtn.classList.toggle('hidden', tab !== 'controls');
     }
     if (tab === 'settings') {
       canvasArea.classList.add('hidden');

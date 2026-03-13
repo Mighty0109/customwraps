@@ -467,12 +467,12 @@ const App = (function () {
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'btn btn-secondary btn-toggle-sliders';
     toggleBtn.id = 'btn-toggle-sliders';
-    toggleBtn.textContent = '컨트롤 슬라이더 접기';
+    toggleBtn.textContent = '컨트롤 슬라이더 펼치기';
     wrap.appendChild(toggleBtn);
 
     // Sliders container (collapsible)
     const slidersWrap = document.createElement('div');
-    slidersWrap.className = 'sliders-collapsible';
+    slidersWrap.className = 'sliders-collapsible collapsed';
     slidersWrap.id = 'sliders-collapsible';
 
     // Scale

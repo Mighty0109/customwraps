@@ -445,6 +445,18 @@ const App = (function () {
 
     buildPanelSelector(panelWrap);
 
+    // Sliders toggle button
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'btn btn-secondary btn-toggle-sliders';
+    toggleBtn.id = 'btn-toggle-sliders';
+    toggleBtn.textContent = '컨트롤 슬라이더 접기';
+    wrap.appendChild(toggleBtn);
+
+    // Sliders container (collapsible)
+    const slidersWrap = document.createElement('div');
+    slidersWrap.className = 'sliders-collapsible';
+    slidersWrap.id = 'sliders-collapsible';
+
     // Scale
     const scaleSlider = UI.createSlider({
       id: 'ctrl-scale', label: '크기 (Scale)',
@@ -452,7 +464,7 @@ const App = (function () {
       onChange: (v) => updateSelectedLayer({ scale: v / 100 }),
     });
     controlRefs.scale = scaleSlider;
-    wrap.appendChild(scaleSlider.wrapper);
+    slidersWrap.appendChild(scaleSlider.wrapper);
 
     // Rotation
     const rotSlider = UI.createSlider({
@@ -461,7 +473,7 @@ const App = (function () {
       onChange: (v) => updateSelectedLayer({ rotation: v }),
     });
     controlRefs.rotation = rotSlider;
-    wrap.appendChild(rotSlider.wrapper);
+    slidersWrap.appendChild(rotSlider.wrapper);
 
     // Opacity
     const opacSlider = UI.createSlider({
@@ -470,7 +482,7 @@ const App = (function () {
       onChange: (v) => updateSelectedLayer({ opacity: v / 100 }),
     });
     controlRefs.opacity = opacSlider;
-    wrap.appendChild(opacSlider.wrapper);
+    slidersWrap.appendChild(opacSlider.wrapper);
 
     // Offset X
     const offXSlider = UI.createSlider({
@@ -479,7 +491,7 @@ const App = (function () {
       onChange: (v) => updateSelectedLayer({ offsetX: v }),
     });
     controlRefs.offsetX = offXSlider;
-    wrap.appendChild(offXSlider.wrapper);
+    slidersWrap.appendChild(offXSlider.wrapper);
 
     // Offset Y
     const offYSlider = UI.createSlider({
@@ -488,7 +500,7 @@ const App = (function () {
       onChange: (v) => updateSelectedLayer({ offsetY: v }),
     });
     controlRefs.offsetY = offYSlider;
-    wrap.appendChild(offYSlider.wrapper);
+    slidersWrap.appendChild(offYSlider.wrapper);
 
     // Reset
     const resetBtn = document.createElement('button');
@@ -502,7 +514,15 @@ const App = (function () {
         refreshLayerList();
       }
     });
-    wrap.appendChild(resetBtn);
+    slidersWrap.appendChild(resetBtn);
+
+    wrap.appendChild(slidersWrap);
+
+    // Toggle event
+    toggleBtn.addEventListener('click', () => {
+      const collapsed = slidersWrap.classList.toggle('collapsed');
+      toggleBtn.textContent = collapsed ? '컨트롤 슬라이더 펼치기' : '컨트롤 슬라이더 접기';
+    });
 
     controlsContainer.appendChild(wrap);
   }

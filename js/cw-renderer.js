@@ -10,6 +10,21 @@ CW.Renderer = (function () {
   var combinedMaskCanvas = null;
   var combinedMaskCtx = null;
 
+  // rAF render throttling - batch all render requests to max 1 per frame
+  var renderPending = false;
+
+  function requestRender() {
+    if (renderPending) return;
+    renderPending = true;
+    requestAnimationFrame(function () {
+      renderPending = false;
+      render();
+    });
+  }
+
+  // Panel mask cache - avoid regenerating combined masks every frame
+  var combinedMaskCache = {};
+
   function init(canvasEl) {
     var s = CW.state;
     s.displayCanvas = canvasEl;
@@ -189,19 +204,7 @@ CW.Renderer = (function () {
         var usePanelMask = layer.selectedPanels && layer.selectedPanels.length > 0 && panelMasks.length > 0;
 
         if (usePanelMask) {
-          if (!combinedMaskCanvas || combinedMaskCanvas.width !== w || combinedMaskCanvas.height !== h) {
-            combinedMaskCanvas = document.createElement('canvas');
-            combinedMaskCanvas.width = w;
-            combinedMaskCanvas.height = h;
-            combinedMaskCtx = combinedMaskCanvas.getContext('2d');
-          }
-          combinedMaskCtx.clearRect(0, 0, w, h);
-          for (var pi = 0; pi < layer.selectedPanels.length; pi++) {
-            var idx = layer.selectedPanels[pi];
-            if (panelMasks[idx]) {
-              combinedMaskCtx.drawImage(panelMasks[idx], 0, 0);
-            }
-          }
+          var mask = getCombinedMask(layer.selectedPanels, panelMasks, w, h);
 
           tempLayerCtx.clearRect(0, 0, w, h);
           tempLayerCtx.save();
@@ -211,7 +214,7 @@ CW.Renderer = (function () {
 
           tempLayerCtx.save();
           tempLayerCtx.globalCompositeOperation = 'destination-in';
-          tempLayerCtx.drawImage(combinedMaskCanvas, 0, 0);
+          tempLayerCtx.drawImage(mask, 0, 0);
           tempLayerCtx.restore();
 
           s.userLayerCtx.drawImage(tempLayerCanvas, 0, 0);
@@ -248,6 +251,19 @@ CW.Renderer = (function () {
       tempLayerCanvas.height = h;
       tempLayerCtx = tempLayerCanvas.getContext('2d');
     }
+  }
+
+  function getCombinedMask(selectedPanels, panelMasks, w, h) {
+    var key = selectedPanels.join(',');
+    if (combinedMaskCache[key]) return combinedMaskCache[key];
+    var mc = document.createElement('canvas');
+    mc.width = w; mc.height = h;
+    var ctx = mc.getContext('2d');
+    for (var i = 0; i < selectedPanels.length; i++) {
+      if (panelMasks[selectedPanels[i]]) ctx.drawImage(panelMasks[selectedPanels[i]], 0, 0);
+    }
+    combinedMaskCache[key] = mc;
+    return mc;
   }
 
   function drawLayerImage(ctx, canvasW, canvasH, layer) {
@@ -307,20 +323,22 @@ CW.Renderer = (function () {
     }
   }
 
-  // Listen for events that require re-render
-  CW.on('layer:added', function () { render(); });
-  CW.on('layer:removed', function () { render(); });
-  CW.on('layer:updated', function () { render(); });
-  CW.on('layer:moved', function () { render(); });
-  CW.on('layer:cleared', function () { render(); });
-  CW.on('layer:imageUpdated', function () { render(); });
-  CW.on('panels:colorChanged', function () { render(); });
-  CW.on('render:request', function () { render(); });
+  // Listen for events that require re-render (batched via rAF)
+  CW.on('layer:added', function () { requestRender(); });
+  CW.on('layer:removed', function () { requestRender(); });
+  CW.on('layer:updated', function () { requestRender(); });
+  CW.on('layer:moved', function () { requestRender(); });
+  CW.on('layer:cleared', function () { requestRender(); });
+  CW.on('layer:imageUpdated', function () { requestRender(); });
+  CW.on('panels:colorChanged', function () { requestRender(); });
+  CW.on('render:request', function () { requestRender(); });
+  CW.on('panels:detected', function () { combinedMaskCache = {}; });
 
   return {
     init: init,
     setTemplate: setTemplate,
     render: render,
+    requestRender: requestRender,
     renderOffscreen: renderOffscreen,
     drawLayerImage: drawLayerImage,
   };

@@ -554,7 +554,6 @@ var App = (function () {
     var layer = CW.LayerStore.getSelected();
     if (!layer) return;
     CW.LayerStore.update(layer.id, props);
-    refreshLayerList();
   }
 
   function refreshControls() {

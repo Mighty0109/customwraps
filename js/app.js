@@ -80,12 +80,13 @@ var App = (function () {
     var canvasEl = document.getElementById('main-canvas');
     CW.Renderer.init(canvasEl);
     CW.CanvasInput.init(canvasEl);
-    CW.Renderer.setTemplate(model);
     CW.LayerStore.clear();
-    showTab('upload');
-    showScreen('editor');
-    refreshLayerList();
-    refreshControls();
+    CW.Renderer.setTemplate(model).then(function () {
+      showTab('upload');
+      showScreen('editor');
+      refreshLayerList();
+      refreshControls();
+    });
   }
 
   function getCurrentModel() {

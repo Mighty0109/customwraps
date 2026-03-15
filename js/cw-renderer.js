@@ -61,7 +61,7 @@ CW.Renderer = (function () {
   function setTemplate(model) {
     CW.state.currentModel = model;
     var src = getTemplatePath(model);
-    loadImage(src).then(function (img) {
+    return loadImage(src).then(function (img) {
       CW.state.templateImage = img;
       CW.state.internalWidth = img.naturalWidth || img.width;
       CW.state.internalHeight = img.naturalHeight || img.height;

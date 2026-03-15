@@ -32,6 +32,14 @@ CW.Export = (function () {
 
     CW.Renderer.renderOffscreen();
 
+    // Apply template alpha to make background transparent
+    if (s.templateImage) {
+      s.offCtx.save();
+      s.offCtx.globalCompositeOperation = 'destination-in';
+      s.offCtx.drawImage(s.templateImage, 0, 0, exportW, exportH);
+      s.offCtx.restore();
+    }
+
     // Restore original state
     s.internalWidth = origW;
     s.internalHeight = origH;

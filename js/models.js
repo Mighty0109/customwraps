@@ -4,12 +4,30 @@
 
 'use strict';
 
+var EXAMPLES_COMMON = [
+  'Acid_Drip', 'Ani', 'Apocalypse', 'Avocado_Green', 'Camo', 'Cosmic_Burst',
+  'Divide', 'Doge', 'Dot_Matrix', 'Ice_Cream', 'Leopard', 'Pixel_Art',
+  'Reindeer', 'Rudi', 'Sakura', 'Sketch', 'String_Lights', 'Valentine',
+  'Vintage_Gradient', 'Vintage_Stripes'
+];
+
+var EXAMPLES_CYBERTRUCK = [
+  'Ani', 'Camo_Blue', 'Camo_Brown', 'Camo_Green', 'Camo_Pink', 'Camo_Sand',
+  'Camo_Snow', 'Camo_Stealth', 'Clay', 'Cosmic_Burst', 'Digital_Camo_Green',
+  'Digital_Camo_Snow', 'Digital_Camo_Stealth', 'Doge_Camo', 'Gradient_Black',
+  'Gradient_Burn', 'Gradient_Cotton_Candy', 'Gradient_Green', 'Gradient_Purple_Burn',
+  'Gradient_Sunburst', 'Graffiti_back', 'Graffiti_green', 'Graffiti_orange',
+  'Grandmas_Sofa', 'Houndstooth', 'Leopard', 'Mika', 'Rc_prototype', 'Retro',
+  'Rudi', 'Rust', 'Valentine', 'Woody', 'Xmas_Camo', 'Xmas_Lights', 'Xray'
+];
+
 const TeslaModels = [
   {
     id: 'cybertruck',
     name: 'Cybertruck',
     subtitle: '',
     folder: 'cybertruck',
+    examples: EXAMPLES_CYBERTRUCK,
     panels: [
       { x: 0.05, y: 0.02, w: 0.35, h: 0.18, label: 'Hood' },
       { x: 0.60, y: 0.02, w: 0.35, h: 0.18, label: 'Roof' },
@@ -29,6 +47,7 @@ const TeslaModels = [
     name: 'Model 3',
     subtitle: '',
     folder: 'model3',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.15, y: 0.02, w: 0.70, h: 0.16, label: 'Hood' },
       { x: 0.02, y: 0.02, w: 0.11, h: 0.28, label: 'L-Fender-F' },
@@ -48,6 +67,7 @@ const TeslaModels = [
     name: 'Model 3 (2024+)',
     subtitle: 'Standard & Premium',
     folder: 'model3-2024-base',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.12, y: 0.02, w: 0.76, h: 0.16, label: 'Hood' },
       { x: 0.02, y: 0.02, w: 0.08, h: 0.30, label: 'L-A-Pillar' },
@@ -67,6 +87,7 @@ const TeslaModels = [
     name: 'Model 3 (2024+)',
     subtitle: 'Performance',
     folder: 'model3-2024-performance',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.10, y: 0.02, w: 0.80, h: 0.16, label: 'Hood' },
       { x: 0.02, y: 0.02, w: 0.06, h: 0.30, label: 'L-A-Pillar' },
@@ -86,6 +107,7 @@ const TeslaModels = [
     name: 'Model Y',
     subtitle: '',
     folder: 'modely',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.15, y: 0.02, w: 0.70, h: 0.18, label: 'Hood' },
       { x: 0.02, y: 0.02, w: 0.11, h: 0.30, label: 'L-Fender' },
@@ -105,6 +127,7 @@ const TeslaModels = [
     name: 'Model Y (2025+)',
     subtitle: 'Standard',
     folder: 'modely-2025-base',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.12, y: 0.02, w: 0.76, h: 0.18, label: 'Hood' },
       { x: 0.02, y: 0.04, w: 0.08, h: 0.26, label: 'L-Fender' },
@@ -124,6 +147,7 @@ const TeslaModels = [
     name: 'Model Y (2025+)',
     subtitle: 'Premium',
     folder: 'modely-2025-premium',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.10, y: 0.02, w: 0.80, h: 0.18, label: 'Hood' },
       { x: 0.02, y: 0.04, w: 0.06, h: 0.28, label: 'L-Fender' },
@@ -143,6 +167,7 @@ const TeslaModels = [
     name: 'Model Y (2025+)',
     subtitle: 'Performance',
     folder: 'modely-2025-performance',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.08, y: 0.02, w: 0.84, h: 0.18, label: 'Hood' },
       { x: 0.02, y: 0.04, w: 0.04, h: 0.28, label: 'L-Fender' },
@@ -162,6 +187,7 @@ const TeslaModels = [
     name: 'Model Y L',
     subtitle: '',
     folder: 'modely-l',
+    examples: EXAMPLES_COMMON,
     panels: [
       { x: 0.12, y: 0.02, w: 0.76, h: 0.16, label: 'Hood' },
       { x: 0.02, y: 0.02, w: 0.08, h: 0.28, label: 'L-Fender' },

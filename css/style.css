@@ -1236,6 +1236,67 @@ h4 { font-size: 0.95rem; font-weight: 600; }
 }
 
 /* ============================================================
+   EXAMPLE BACKGROUNDS
+   ============================================================ */
+
+.btn-example-bg {
+  width: 100%;
+  margin-top: 12px;
+  min-height: 42px;
+  font-size: 0.8125rem;
+}
+
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.example-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+  font-family: inherit;
+  color: inherit;
+  padding: 0;
+}
+
+.example-item:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+}
+
+.example-item:active {
+  transform: scale(0.96);
+}
+
+.example-item img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: var(--bg-elevated);
+}
+
+.example-name {
+  display: block;
+  width: 100%;
+  padding: 5px 4px;
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
    TOAST
    ============================================================ */
 

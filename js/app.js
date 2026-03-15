@@ -114,6 +114,7 @@ var App = (function () {
     uploadZoneContainer.appendChild(zone);
 
     buildTextInput(uploadZoneContainer);
+    buildExampleButton(uploadZoneContainer);
     buildControls();
   }
 
@@ -261,6 +262,73 @@ var App = (function () {
       refreshControls();
     };
     img.src = canvas.toDataURL('image/png');
+  }
+
+  // ========================
+  // Example Backgrounds
+  // ========================
+
+  function buildExampleButton(container) {
+    var btn = document.createElement('button');
+    btn.className = 'btn btn-secondary btn-example-bg';
+    btn.innerHTML =
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none">' +
+        '<rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>' +
+        '<rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>' +
+        '<rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>' +
+        '<rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>' +
+      '</svg>' +
+      '\uc608\uc81c \ubc30\uacbd';
+    btn.addEventListener('click', openExampleSheet);
+    container.appendChild(btn);
+  }
+
+  function openExampleSheet() {
+    if (!currentModel || !currentModel.examples || currentModel.examples.length === 0) {
+      UI.showToast('\uc774 \ubaa8\ub378\uc5d0\ub294 \uc608\uc81c\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.');
+      return;
+    }
+
+    var content = document.createElement('div');
+    content.className = 'example-content';
+    content.innerHTML = '<h3 class="export-title">\uc608\uc81c \ubc30\uacbd \uc120\ud0dd</h3>';
+
+    var grid = document.createElement('div');
+    grid.className = 'example-grid';
+
+    currentModel.examples.forEach(function (name) {
+      var src = 'templates/' + currentModel.folder + '/example/' + name + '.png';
+      var item = document.createElement('button');
+      item.className = 'example-item';
+      item.innerHTML =
+        '<img src="' + src + '" alt="' + name.replace(/_/g, ' ') + '" loading="lazy">' +
+        '<span class="example-name">' + name.replace(/_/g, ' ') + '</span>';
+      item.addEventListener('click', function () {
+        loadExampleAsLayer(name, src, sheet);
+      });
+      grid.appendChild(item);
+    });
+
+    content.appendChild(grid);
+    var sheet = UI.createBottomSheet(content);
+  }
+
+  function loadExampleAsLayer(name, src, sheet) {
+    if (CW.LayerStore.getCount() >= CW.LayerStore.getMaxLayers()) {
+      UI.showToast('\ucd5c\ub300 ' + CW.LayerStore.getMaxLayers() + '\uac1c \ub808\uc774\uc5b4\uae4c\uc9c0 \ucd94\uac00\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.');
+      return;
+    }
+    loadImage(src).then(function (img) {
+      var id = 'example_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      CW.LayerStore.add(img, id, name.replace(/_/g, ' '));
+      CW.LayerStore.update(id, { fillMode: 'stretch', scale: 1.0 });
+      CW.LayerStore.setSelected(id);
+      refreshLayerList();
+      refreshControls();
+      UI.closeBottomSheet(sheet);
+    }).catch(function () {
+      UI.showToast('\uc608\uc81c \uc774\ubbf8\uc9c0\ub97c \ubd88\ub7ec\uc62c \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.');
+    });
   }
 
   // ========================

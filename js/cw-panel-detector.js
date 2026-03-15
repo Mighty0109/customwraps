@@ -39,6 +39,31 @@ CW.PanelDetector = (function () {
     var THRESHOLD = 245;
     var MIN_REGION_PIXELS = 500;
 
+    // Build connectivity mask from brightness threshold
+    var conn = new Uint8Array(w * h);
+    for (var ci2 = 0; ci2 < w * h; ci2++) {
+      conn[ci2] = bright[ci2] >= THRESHOLD ? 1 : 0;
+    }
+
+    // Cybertruck: dilate bright mask by 1px to bridge boundaries ≤ 2px
+    var isCybertruck = CW.state.currentModel && CW.state.currentModel.id === 'cybertruck';
+    if (isCybertruck) {
+      var dilated = new Uint8Array(w * h);
+      for (var dy = 0; dy < h; dy++) {
+        for (var dx = 0; dx < w; dx++) {
+          var di = dy * w + dx;
+          if (conn[di]) { dilated[di] = 1; continue; }
+          if ((dy > 0     && conn[di - w]) ||
+              (dy < h - 1 && conn[di + w]) ||
+              (dx > 0     && conn[di - 1]) ||
+              (dx < w - 1 && conn[di + 1])) {
+            dilated[di] = 1;
+          }
+        }
+      }
+      conn = dilated;
+    }
+
     var labels = new Int32Array(w * h);
     var nextLabel = 1;
     var regions = [];
@@ -46,7 +71,7 @@ CW.PanelDetector = (function () {
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         var pidx = y * w + x;
-        if (bright[pidx] >= THRESHOLD && labels[pidx] === 0) {
+        if (conn[pidx] && labels[pidx] === 0) {
           var label = nextLabel++;
           var count = 0, sumX = 0, sumY = 0;
           var queue = [pidx];
@@ -61,10 +86,10 @@ CW.PanelDetector = (function () {
             sumX += cx;
             sumY += cy;
 
-            if (cy > 0     && labels[ci - w] === 0 && bright[ci - w] >= THRESHOLD) { labels[ci - w] = label; queue.push(ci - w); }
-            if (cy < h - 1 && labels[ci + w] === 0 && bright[ci + w] >= THRESHOLD) { labels[ci + w] = label; queue.push(ci + w); }
-            if (cx > 0     && labels[ci - 1] === 0 && bright[ci - 1] >= THRESHOLD) { labels[ci - 1] = label; queue.push(ci - 1); }
-            if (cx < w - 1 && labels[ci + 1] === 0 && bright[ci + 1] >= THRESHOLD) { labels[ci + 1] = label; queue.push(ci + 1); }
+            if (cy > 0     && labels[ci - w] === 0 && conn[ci - w]) { labels[ci - w] = label; queue.push(ci - w); }
+            if (cy < h - 1 && labels[ci + w] === 0 && conn[ci + w]) { labels[ci + w] = label; queue.push(ci + w); }
+            if (cx > 0     && labels[ci - 1] === 0 && conn[ci - 1]) { labels[ci - 1] = label; queue.push(ci - 1); }
+            if (cx < w - 1 && labels[ci + 1] === 0 && conn[ci + 1]) { labels[ci + 1] = label; queue.push(ci + 1); }
           }
 
           if (count >= MIN_REGION_PIXELS) {
@@ -103,7 +128,12 @@ CW.PanelDetector = (function () {
         md[mdi] = 255;
         md[mdi + 1] = 255;
         md[mdi + 2] = 255;
-        md[mdi + 3] = labels[mi] === region.label ? Math.round(bright[mi]) : 0;
+        if (labels[mi] === region.label) {
+          // Dilated boundary pixels (originally dark) get full alpha
+          md[mdi + 3] = bright[mi] >= THRESHOLD ? Math.round(bright[mi]) : 255;
+        } else {
+          md[mdi + 3] = 0;
+        }
       }
 
       mCtx.putImageData(maskData, 0, 0);

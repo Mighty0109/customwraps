@@ -36,7 +36,10 @@ CW.PanelDetector = (function () {
       bright[i] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
     }
 
-    var THRESHOLD = 245;
+    var isCybertruck = CW.state.currentModel && CW.state.currentModel.id === 'cybertruck';
+    // Cybertruck: lower threshold so gray guide lines are treated as panel area,
+    // only thick black lines act as boundaries
+    var THRESHOLD = isCybertruck ? 128 : 245;
     var MIN_REGION_PIXELS = 500;
 
     // Build connectivity mask from brightness threshold
@@ -46,7 +49,6 @@ CW.PanelDetector = (function () {
     }
 
     // Cybertruck: dilate bright mask by 1px to bridge boundaries ≤ 2px
-    var isCybertruck = CW.state.currentModel && CW.state.currentModel.id === 'cybertruck';
     if (isCybertruck) {
       var dilated = new Uint8Array(w * h);
       for (var dy = 0; dy < h; dy++) {
